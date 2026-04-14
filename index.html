@@ -210,7 +210,30 @@
   .mbtn.secondary{background:var(--bg2);color:var(--ink-muted);}
   .mbtn.danger{background:var(--red-light);color:var(--red);}
 
-  @media(max-width:600px){
+  .scorecard{margin-top:1rem;}
+  .sc-row{display:grid;grid-template-columns:60px 1fr 1fr;gap:6px;padding:8px 0;border-bottom:1px solid var(--border);align-items:start;font-size:12px;}
+  .sc-row:last-child{border-bottom:none;}
+  .sc-day{font-weight:600;color:var(--ink-muted);font-size:11px;padding-top:2px;}
+  .sc-items{display:flex;flex-wrap:wrap;gap:4px;}
+  .sc-item{padding:2px 7px;border-radius:6px;font-size:11px;font-weight:500;}
+  .sc-item.pos{background:var(--green-good-light);color:var(--green-good);}
+  .sc-item.neg{background:var(--red-light);color:var(--red);}
+  .sc-item.neutral{background:var(--bg2);color:var(--ink-muted);}
+  .wb-row{display:grid;grid-template-columns:80px 1fr 1fr;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;transition:background 0.15s;}
+  .wb-row:hover{background:var(--bg2);}
+  .wb-row.header-row{cursor:default;}
+  .wb-row.header-row:hover{background:var(--bg2);}
+  .wb-expand{display:none;grid-column:1/-1;padding:0 16px 12px;}
+  .wb-expand.open{display:block;}
+  .wb-expand-inner{background:var(--bg2);border-radius:12px;padding:10px 14px;}
+  .wb-expand-user{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;margin-top:10px;}
+  .wb-expand-user:first-child{margin-top:0;}
+  .wb-expand-user.mjb{color:var(--mjb);}
+  .wb-expand-user.ajs{color:var(--ajs);}
+  .wb-expand-day{display:flex;align-items:flex-start;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;}
+  .wb-expand-day:last-child{border-bottom:none;}
+  .wb-expand-day-name{min-width:44px;color:var(--ink-muted);font-weight:500;}
+  .wb-expand-items{display:flex;flex-wrap:wrap;gap:3px;}
     .activity-grid{grid-template-columns:repeat(3,1fr);}
     .wb-pts-item{padding:6px 10px;}
     .wb-pts-num{font-size:18px;}
@@ -304,6 +327,7 @@
       <div class="card">
         <div style="font-family:'Fraunces',serif;font-size:15px;color:var(--ink);margin-bottom:12px">This week's points</div>
         <div class="pts-bars" id="ptsBars"></div>
+        <div class="scorecard" id="rewardsScorecard"></div>
       </div>
       <div id="punishments"></div>
       <div class="sec-label">Weekly Rewards</div>
@@ -446,10 +470,9 @@
     for(const d of days){
       if(isWeekend(d)) continue;
       const act=await fGet('acts',`${user}_${d}`);
-      if(act){
-        (act.logged||[]).forEach(id=>{const a=ACTIVITIES.find(x=>x.id===id);if(a)pts+=a.pts;});
-        (act.shared||[]).forEach(id=>{const a=SHARED_ACTS.find(x=>x.id===id);if(a)pts+=a.pts;});
-      }
+      if(act){ (act.logged||[]).forEach(id=>{const a=ACTIVITIES.find(x=>x.id===id);if(a)pts+=a.pts;}); }
+      const sharedAct=await fGet('shared_acts',d);
+      if(sharedAct){ (sharedAct.logged||[]).forEach(id=>{const a=SHARED_ACTS.find(x=>x.id===id);if(a)pts+=a.pts;}); }
       const meal=await fGet('meals',d);
       if(meal?.ticked) pts+=1;
       const start=await fGet('starts',`${user}_${d}`);
@@ -575,7 +598,8 @@
 
   async function renderActGrid(d,wknd){
     const snap=await fGet('acts',`${currentUser}_${d}`);
-    const logged=snap?.logged||[], shared=snap?.shared||[];
+    const sharedSnap=await fGet('shared_acts',d);
+    const logged=snap?.logged||[], shared=sharedSnap?.logged||[];
     const noClick=wknd?'style="opacity:0.4;pointer-events:none"':'';
     document.getElementById('actGrid').innerHTML=ACTIVITIES.map(a=>`
       <div class="act-card ${logged.includes(a.id)?'done':''}" ${noClick} onclick="toggleAct('${a.id}','${d}',false)">
@@ -612,12 +636,23 @@
   };
 
   window.toggleAct=async function(id,d,isShared){
+    if(isShared){
+      // Shared activities stored in a shared doc, not per user
+      const snap=await fGet('shared_acts',d);
+      const cur=snap?.logged||[];
+      const updated=cur.includes(id)?cur.filter(x=>x!==id):[...cur,id];
+      await fSet('shared_acts',d,{logged:updated});
+      const act=SHARED_ACTS.find(a=>a.id===id);
+      showToast(cur.includes(id)?`${act.name} removed`:`${act.icon} +${act.pts} pts each!`);
+      renderActGrid(d,false);
+      updateWeekPts();
+      return;
+    }
     const snap=await fGet('acts',`${currentUser}_${d}`);
-    const key=isShared?'shared':'logged';
-    const cur=snap?.[key]||[];
+    const cur=snap?.logged||[];
     const updated=cur.includes(id)?cur.filter(x=>x!==id):[...cur,id];
-    await fSet('acts',`${currentUser}_${d}`,{[key]:updated});
-    const act=isShared?SHARED_ACTS.find(a=>a.id===id):ACTIVITIES.find(a=>a.id===id);
+    await fSet('acts',`${currentUser}_${d}`,{logged:updated});
+    const act=ACTIVITIES.find(a=>a.id===id);
     showToast(cur.includes(id)?`${act.name} removed`:`${act.icon} +${act.pts} pts!`);
     renderActGrid(d,false);
     updateWeekPts();
@@ -719,6 +754,50 @@
     if(document.getElementById('planner').classList.contains('active')) renderPlanner();
   };
 
+  // Helper: get day breakdown for a user
+  async function getDayBreakdown(user, d){
+    const items=[];
+    const act=await fGet('acts',`${user}_${d}`);
+    if(act) (act.logged||[]).forEach(id=>{const a=ACTIVITIES.find(x=>x.id===id);if(a)items.push({label:`${a.icon} ${a.name}`,pts:a.pts,pos:true});});
+    const sharedAct=await fGet('shared_acts',d);
+    if(sharedAct) (sharedAct.logged||[]).forEach(id=>{const a=SHARED_ACTS.find(x=>x.id===id);if(a)items.push({label:`${a.icon} ${a.name}`,pts:a.pts,pos:true});});
+    const meal=await fGet('meals',d);
+    if(meal?.ticked) items.push({label:'🥦 Ate well',pts:1,pos:true});
+    const start=await fGet('starts',`${user}_${d}`);
+    if(start?.type==='early') items.push({label:'🌅 Early start',pts:2,pos:true});
+    if(start?.type==='late') items.push({label:'😴 Late start',pts:-3,pos:false});
+    const dow=new Date(d).getDay();
+    if(dow>=1&&dow<=4){
+      const customs=await getCustomRewards();
+      const allRewards=[...PRESET_REWARDS,...customs];
+      const ruse=await fGet('reward_use',`${user}_${d}`);
+      if(ruse?.used){const r=allRewards.find(x=>x.id===ruse.rewardId);if(r)items.push({label:`⚠️ Early ${r.name}`,pts:-(r.cost+5),pos:false});}
+    }
+    return items;
+  }
+
+  async function renderScorecard(wk, containerId){
+    const days=getWeekDays(wk);
+    const weekdays=days.filter(d=>!isWeekend(d));
+    let html='';
+    for(const d of weekdays){
+      const [mjbItems,ajsItems]=await Promise.all([getDayBreakdown('MJB',d),getDayBreakdown('AJS',d)]);
+      const dayName=new Date(d).toLocaleDateString('en-NZ',{weekday:'short',day:'numeric'});
+      const renderItems=(items,user)=>items.length
+        ?items.map(x=>`<span class="sc-item ${x.pos?'pos':'neg'}">${x.label} ${x.pts>0?'+':''}${x.pts}</span>`).join('')
+        :`<span class="sc-item neutral">Nothing logged</span>`;
+      html+=`<div class="sc-row">
+        <div class="sc-day">${dayName}</div>
+        <div class="sc-items">${renderItems(mjbItems,'MJB')}</div>
+        <div class="sc-items">${renderItems(ajsItems,'AJS')}</div>
+      </div>`;
+    }
+    const header=`<div class="sc-row" style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--ink-muted);padding-bottom:6px">
+      <div></div><div style="color:var(--mjb)">MJB 🩷</div><div style="color:var(--ajs)">AJS 💚</div>
+    </div>`;
+    document.getElementById(containerId).innerHTML=header+html;
+  }
+
   // TAB 3: REWARDS
   async function renderRewards(){
     const wk=currentWeekNum();
@@ -728,9 +807,10 @@
       <div class="pts-bar-row"><div class="pts-bar-name mjb">MJB</div><div class="pts-track"><div class="pts-fill mjb" style="width:${Math.min(100,(mW/maxRef)*100)}%"></div></div><div class="pts-num">${mW} pts</div></div>
       <div class="pts-bar-row"><div class="pts-bar-name ajs">AJS</div><div class="pts-track"><div class="pts-fill ajs" style="width:${Math.min(100,(aW/maxRef)*100)}%"></div></div><div class="pts-num">${aW} pts</div></div>`;
 
+    await renderScorecard(wk,'rewardsScorecard');
+
     const customs=await getCustomRewards();
     const allRewards=[...PRESET_REWARDS,...customs];
-
     const days=getWeekDays(wk);
     let punHtml='';
     for(const user of ['MJB','AJS']){
@@ -793,18 +873,48 @@
     document.getElementById('mjbTotal').textContent=mT;
     document.getElementById('ajsTotal').textContent=aT;
     const wk=currentWeekNum();
-    let rows='<div class="wb-row header-row"><div>Week</div><div>MJB 🩷</div><div>AJS 💚</div></div>';
+    let rows='<div class="wb-row header-row" style="cursor:default"><div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--ink-muted)">Week</div><div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--mjb)">MJB 🩷</div><div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--ajs)">AJS 💚</div></div>';
     for(let w=0;w<4;w++){
       const [mP,aP]=await Promise.all([calcWeekPts('MJB',w),calcWeekPts('AJS',w)]);
       const days=getWeekDays(w);
-      rows+=`<div class="wb-row ${w===wk?'current-week':''}">
-        <div class="wb-week">Wk ${w+1}<br><span style="font-size:10px;color:var(--ink-muted)">${fmtDate(days[0])}</span></div>
+      rows+=`<div class="wb-row ${w===wk?'current-week':''}" onclick="toggleWeekExpand(${w})">
+        <div class="wb-week">Wk ${w+1} <span style="font-size:14px;color:var(--ink-muted)">▸</span><br><span style="font-size:10px;color:var(--ink-muted)">${fmtDate(days[0])}</span></div>
         <div class="wb-pts-cell mjb">${mP} pts</div>
         <div class="wb-pts-cell ajs">${aP} pts</div>
+      </div>
+      <div class="wb-expand" id="wbexpand-${w}">
+        <div class="wb-expand-inner" id="wbexpand-inner-${w}">Loading...</div>
       </div>`;
     }
     document.getElementById('weekBreakdown').innerHTML=rows;
   }
+
+  window.toggleWeekExpand=async function(w){
+    const el=document.getElementById(`wbexpand-${w}`);
+    const inner=document.getElementById(`wbexpand-inner-${w}`);
+    const isOpen=el.classList.contains('open');
+    // Close all
+    document.querySelectorAll('.wb-expand').forEach(e=>e.classList.remove('open'));
+    if(isOpen) return;
+    el.classList.add('open');
+    // Build breakdown
+    const days=getWeekDays(w).filter(d=>!isWeekend(d));
+    let html='';
+    for(const user of ['MJB','AJS']){
+      html+=`<div class="wb-expand-user ${user.toLowerCase()}">${user} ${user==='MJB'?'🩷':'💚'}</div>`;
+      for(const d of days){
+        const items=await getDayBreakdown(user,d);
+        const dayName=new Date(d).toLocaleDateString('en-NZ',{weekday:'short',day:'numeric'});
+        html+=`<div class="wb-expand-day">
+          <div class="wb-expand-day-name">${dayName}</div>
+          <div class="wb-expand-items">
+            ${items.length?items.map(x=>`<span class="sc-item ${x.pos?'pos':'neg'}">${x.label} ${x.pts>0?'+':''}${x.pts}</span>`).join(''):'<span class="sc-item neutral">Nothing</span>'}
+          </div>
+        </div>`;
+      }
+    }
+    inner.innerHTML=html;
+  };
 
   // AUTO LOGIN
   if(currentUser){
