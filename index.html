@@ -910,7 +910,7 @@
 
     const todayDow=new Date().getDay(), isFriWknd=todayDow===5||todayDow===0||todayDow===6;
     document.getElementById('rewardsGrid').innerHTML=allRewards.map(r=>{
-      const canAfford=walletTotal>=r.cost;
+      const canAfford=walletTotal>=effectiveCost;
       const penaltyPts=r.penalty??5;
       const effectiveCost=isFriWknd?r.cost:(r.cost+penaltyPts);
 
