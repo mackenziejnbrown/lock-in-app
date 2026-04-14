@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AJS + MJB LOCK IN 🔒</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #FDF6EE;
+    --bg2: #F5EDE0;
+    --surface: #FFFFFF;
+    --border: rgba(180,130,80,0.15);
+    --border2: rgba(180,130,80,0.28);
+    --orange: #E8713A;
+    --orange-light: #F5956A;
+    --orange-dim: rgba(232,113,58,0.1);
+    --green-good: #4A9063;
+    --green-good-light: #E8F4ED;
+    --red: #D94F4F;
+    --red-light: #FDEAEA;
+    --ink: #2A1F14;
+    --ink-light: #6B5540;
+    --ink-muted: #9E856A;
+    --mjb: #D4638A;
+    --mjb-light: #FDF0F4;
+    --mjb-mid: rgba(212,99,138,0.15);
+    --mjb-border: rgba(212,99,138,0.3);
+    --ajs: #4A9063;
+    --ajs-light: #EEF7F1;
+    --ajs-mid: rgba(74,144,99,0.15);
+    --ajs-border: rgba(74,144,99,0.3);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{scroll-behavior:smooth;}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;}
+
+  /* LOGIN */
+  #loginScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem;}
+  .login-card{background:var(--surface);border-radius:24px;border:1px solid var(--border);padding:3rem 2.5rem;max-width:400px;width:100%;text-align:center;box-shadow:0 8px 40px rgba(180,130,80,0.12);}
+  .login-emoji{font-size:48px;margin-bottom:12px;}
+  .login-card h1{font-family:'Fraunces',serif;font-size:26px;color:var(--ink);margin-bottom:6px;}
+  .login-card p{font-size:14px;color:var(--ink-muted);margin-bottom:2rem;}
+  .login-btns{display:flex;gap:12px;}
+  .login-btn{flex:1;padding:20px;border:2px solid;border-radius:16px;background:var(--surface);cursor:pointer;font-family:'Fraunces',serif;font-size:20px;font-weight:700;transition:all 0.2s;}
+  .login-btn.mjb{color:var(--mjb);border-color:var(--mjb);}
+  .login-btn.mjb:hover{background:var(--mjb-light);}
+  .login-btn.ajs{color:var(--ajs);border-color:var(--ajs);}
+  .login-btn.ajs:hover{background:var(--ajs-light);}
+
+  /* APP */
+  #app{display:none;}
+  header{background:var(--surface);border-bottom:1px solid var(--border);padding:0.85rem 1.25rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:300;}
+  .header-title{font-family:'Fraunces',serif;font-size:17px;color:var(--ink);}
+  .header-right{display:flex;align-items:center;gap:8px;}
+  .header-pts{font-size:12px;font-weight:500;background:var(--bg2);color:var(--ink-muted);padding:5px 11px;border-radius:20px;}
+  .header-user{font-size:13px;font-weight:700;padding:5px 13px;border-radius:20px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;}
+  .header-user.mjb{background:var(--mjb-light);color:var(--mjb);}
+  .header-user.ajs{background:var(--ajs-light);color:var(--ajs);}
+
+  .tabs{display:flex;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto;-webkit-overflow-scrolling:touch;position:sticky;top:53px;z-index:200;}
+  .tab{padding:11px 18px;font-size:13px;font-weight:500;color:var(--ink-muted);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:all 0.2s;flex-shrink:0;}
+  .tab:hover{color:var(--ink);}
+  .tab.active{color:var(--orange);border-bottom-color:var(--orange);}
+
+  main{max-width:960px;margin:0 auto;padding:1.25rem 1rem 5rem;}
+  .section{display:none;}
+  .section.active{display:block;}
+
+  .sec-label{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--ink-muted);margin:1.25rem 0 0.6rem;}
+  .card{background:var(--surface);border-radius:16px;border:1px solid var(--border);padding:1.1rem 1.2rem;margin-bottom:1rem;}
+
+  .toast{position:fixed;bottom:72px;left:50%;transform:translateX(-50%) translateY(16px);background:var(--ink);color:#fff;padding:9px 18px;border-radius:20px;font-size:13px;font-weight:500;opacity:0;transition:all 0.3s;pointer-events:none;white-space:nowrap;z-index:999;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  /* TAB 1 */
+  .week-banner{background:linear-gradient(120deg,var(--orange) 0%,#F0A050 100%);border-radius:18px;padding:1.2rem 1.4rem;color:white;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;}
+  .wb-left h2{font-family:'Fraunces',serif;font-size:20px;margin-bottom:2px;}
+  .wb-left p{font-size:13px;opacity:0.85;}
+  .wb-pts{display:flex;gap:10px;}
+  .wb-pts-item{text-align:center;background:rgba(255,255,255,0.2);border-radius:12px;padding:8px 14px;}
+  .wb-pts-name{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;opacity:0.85;}
+  .wb-pts-num{font-family:'Fraunces',serif;font-size:22px;font-weight:700;line-height:1.1;}
+
+  .day-strip{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:1.1rem;}
+  .day-pill{text-align:center;padding:8px 3px;border-radius:12px;cursor:pointer;border:1.5px solid var(--border);background:var(--surface);transition:all 0.15s;}
+  .day-pill .dp-name{font-size:9px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--ink-muted);}
+  .day-pill .dp-num{font-size:15px;font-weight:600;color:var(--ink);margin-top:1px;}
+  .day-pill.is-today{border-color:var(--orange);}
+  .day-pill.is-selected{background:var(--orange);border-color:var(--orange);}
+  .day-pill.is-selected .dp-name,.day-pill.is-selected .dp-num{color:white;}
+  .day-pill.is-weekend{background:var(--bg2);}
+
+  .day-card{background:var(--surface);border-radius:18px;border:1px solid var(--border);overflow:hidden;}
+  .day-card-header{padding:1rem 1.2rem 0.75rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+  .day-card-header h3{font-family:'Fraunces',serif;font-size:17px;color:var(--ink);}
+  .weekend-badge{font-size:12px;font-weight:500;background:var(--orange-dim);color:var(--orange);padding:4px 10px;border-radius:20px;}
+  .day-section{padding:0.9rem 1.2rem;border-bottom:1px solid var(--border);}
+  .day-section:last-child{border-bottom:none;}
+  .day-section-title{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink-muted);margin-bottom:0.7rem;}
+
+  .ticks-row{display:flex;flex-wrap:wrap;gap:8px;}
+  .tick-btn{display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface);cursor:pointer;font-size:13px;font-weight:500;color:var(--ink-light);font-family:'DM Sans',sans-serif;transition:all 0.15s;}
+  .tick-btn.on-good{border-color:var(--green-good);background:var(--green-good-light);color:var(--green-good);}
+  .tick-btn.on-bad{border-color:var(--red);background:var(--red-light);color:var(--red);}
+
+  .meal-row{display:grid;grid-template-columns:72px 1fr;gap:6px;margin-bottom:6px;align-items:center;}
+  .meal-row-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--ink-muted);}
+  .meal-cell-inline{border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:13px;color:var(--ink-light);cursor:pointer;transition:border-color 0.15s;min-height:38px;display:flex;align-items:center;}
+  .meal-cell-inline:hover{border-color:var(--orange);}
+  .meal-cell-inline.has-meal{color:var(--ink);font-weight:500;}
+  .meal-cell-inline.eaten{background:var(--green-good-light);border-color:var(--green-good);color:var(--green-good);}
+
+  .activity-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(115px,1fr));gap:8px;}
+  .act-card{background:var(--bg2);border:1.5px solid var(--border);border-radius:13px;padding:11px 8px;text-align:center;cursor:pointer;transition:all 0.15s;position:relative;user-select:none;}
+  .act-card:hover{border-color:var(--border2);transform:translateY(-1px);}
+  .act-card.done{border-color:var(--green-good);background:var(--green-good-light);}
+  .act-card.done-shared{border-color:var(--orange);background:var(--orange-dim);}
+  .act-card .ac-icon{font-size:24px;margin-bottom:4px;}
+  .act-card .ac-name{font-size:11px;font-weight:500;color:var(--ink);line-height:1.2;}
+  .act-card .ac-pts{font-size:10px;color:var(--ink-muted);margin-top:2px;}
+  .act-check{position:absolute;top:6px;right:6px;width:18px;height:18px;border-radius:50%;background:var(--green-good);color:white;font-size:10px;display:none;align-items:center;justify-content:center;}
+  .act-card.done .act-check{display:flex;}
+  .act-card.done-shared .act-check{display:flex;background:var(--orange);}
+
+  /* TAB 2: PLANNER */
+  .planner-week-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;}
+  .planner-week-nav h3{font-family:'Fraunces',serif;font-size:16px;color:var(--ink);}
+  .nav-btn{background:none;border:1px solid var(--border2);border-radius:8px;padding:6px 13px;cursor:pointer;font-size:14px;color:var(--ink-muted);transition:all 0.15s;font-family:'DM Sans',sans-serif;}
+  .nav-btn:hover{border-color:var(--orange);color:var(--orange);}
+  .planner-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .planner-grid{display:grid;grid-template-columns:64px repeat(7,minmax(90px,1fr));gap:4px;min-width:700px;}
+  .pg-header{text-align:center;padding:6px 2px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ink-muted);}
+  .pg-header.weekend{color:var(--orange);}
+  .pg-header.is-today{color:var(--orange);font-weight:800;}
+  .pg-label{display:flex;align-items:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ink-muted);padding:2px 0;}
+  .pg-cell{border:1px solid var(--border);border-radius:9px;padding:6px 5px;min-height:54px;background:var(--surface);cursor:pointer;transition:border-color 0.15s;color:var(--ink-light);display:flex;flex-direction:column;gap:2px;align-items:flex-start;}
+  .pg-cell:hover{border-color:var(--orange);}
+  .pg-cell.weekend{background:var(--bg2);}
+  .pg-cell .pg-meal{font-size:11px;font-weight:500;line-height:1.25;color:var(--ink);}
+  .pg-cell .pg-add{font-size:18px;color:var(--border2);margin:auto;}
+  .pg-cell.eaten{background:var(--green-good-light);border-color:var(--green-good);}
+  .pg-act{font-size:10px;padding:2px 5px;border-radius:5px;display:inline-block;font-weight:500;margin-top:1px;}
+  .pg-act.mjb{background:var(--mjb-mid);color:var(--mjb);}
+  .pg-act.ajs{background:var(--ajs-mid);color:var(--ajs);}
+
+  /* TAB 3: REWARDS */
+  .pts-bars{display:flex;flex-direction:column;gap:8px;margin-bottom:1rem;}
+  .pts-bar-row{display:flex;align-items:center;gap:10px;}
+  .pts-bar-name{font-size:12px;font-weight:700;min-width:36px;}
+  .pts-bar-name.mjb{color:var(--mjb);}
+  .pts-bar-name.ajs{color:var(--ajs);}
+  .pts-track{flex:1;height:8px;background:var(--bg2);border-radius:4px;overflow:hidden;}
+  .pts-fill{height:100%;border-radius:4px;transition:width 0.6s;}
+  .pts-fill.mjb{background:var(--mjb);}
+  .pts-fill.ajs{background:var(--ajs);}
+  .pts-num{font-size:12px;color:var(--ink-muted);min-width:52px;text-align:right;}
+
+  .rewards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:1rem;}
+  .reward-card{background:var(--surface);border:1.5px solid var(--border);border-radius:16px;padding:1.1rem;text-align:center;transition:all 0.2s;position:relative;}
+  .reward-card.unlocked{border-color:var(--green-good);background:var(--green-good-light);cursor:pointer;}
+  .reward-card.unlocked:hover{transform:translateY(-2px);}
+  .reward-card.locked{opacity:0.55;}
+  .rc-icon{font-size:30px;margin-bottom:6px;}
+  .rc-name{font-size:13px;font-weight:600;color:var(--ink);margin-bottom:3px;}
+  .rc-cost{font-size:12px;color:var(--ink-muted);}
+  .rc-status{font-size:11px;font-weight:600;margin-top:8px;padding:4px 10px;border-radius:20px;display:inline-block;}
+  .rc-status.unlocked{background:var(--green-good);color:white;}
+  .rc-status.locked{background:var(--bg2);color:var(--ink-muted);}
+  .rc-delete{position:absolute;top:8px;right:8px;width:20px;height:20px;border-radius:50%;background:var(--red-light);border:none;color:var(--red);font-size:12px;cursor:pointer;display:none;align-items:center;justify-content:center;}
+  .reward-card:hover .rc-delete.visible{display:flex;}
+  .add-reward-btn{width:100%;padding:13px;border:2px dashed var(--border2);border-radius:14px;background:none;color:var(--ink-muted);font-size:14px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s;margin-top:0.5rem;}
+  .add-reward-btn:hover{border-color:var(--orange);color:var(--orange);}
+  .punishment-row{background:var(--red-light);border:1px solid rgba(217,79,79,0.25);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--red);margin-bottom:6px;}
+
+  /* TAB 4: POINTS */
+  .pts-total-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1.5rem;}
+  .pts-total-card{border-radius:18px;padding:1.4rem;}
+  .pts-total-card.mjb{background:var(--mjb-light);border:1.5px solid var(--mjb-border);}
+  .pts-total-card.ajs{background:var(--ajs-light);border:1.5px solid var(--ajs-border);}
+  .ptc-name{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;}
+  .pts-total-card.mjb .ptc-name{color:var(--mjb);}
+  .pts-total-card.ajs .ptc-name{color:var(--ajs);}
+  .ptc-num{font-family:'Fraunces',serif;font-size:42px;font-weight:700;color:var(--ink);line-height:1;}
+  .ptc-label{font-size:12px;color:var(--ink-muted);margin-top:4px;}
+  .week-breakdown{background:var(--surface);border-radius:16px;border:1px solid var(--border);overflow:hidden;}
+  .wb-row{display:grid;grid-template-columns:80px 1fr 1fr;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;}
+  .wb-row:last-child{border-bottom:none;}
+  .wb-row.header-row{background:var(--bg2);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--ink-muted);}
+  .wb-week{font-size:13px;font-weight:600;color:var(--ink);}
+  .wb-pts-cell{font-size:14px;font-weight:600;}
+  .wb-pts-cell.mjb{color:var(--mjb);}
+  .wb-pts-cell.ajs{color:var(--ajs);}
+  .wb-row.current-week{background:var(--orange-dim);}
+
+  /* MODALS */
+  .modal-overlay{position:fixed;inset:0;background:rgba(42,31,20,0.45);z-index:500;display:flex;align-items:center;justify-content:center;padding:1rem;}
+  .modal{background:var(--surface);border-radius:20px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.18);}
+  .modal h3{font-family:'Fraunces',serif;font-size:18px;margin-bottom:4px;color:var(--ink);}
+  .modal-sub{font-size:13px;color:var(--ink-muted);margin-bottom:1rem;}
+  .modal input,.modal textarea{width:100%;border:1.5px solid var(--border2);border-radius:11px;padding:10px 13px;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--ink);background:var(--bg);margin-bottom:10px;}
+  .modal input:focus,.modal textarea:focus{outline:none;border-color:var(--orange);}
+  .modal textarea{resize:none;height:72px;}
+  .modal-row{display:flex;gap:8px;margin-bottom:10px;}
+  .modal-row input{margin-bottom:0;}
+  .modal-btns{display:flex;gap:8px;margin-top:4px;}
+  .mbtn{flex:1;padding:11px;border-radius:10px;border:none;font-size:14px;font-weight:500;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all 0.15s;}
+  .mbtn.primary{background:var(--orange);color:white;}
+  .mbtn.primary:hover{background:var(--orange-light);}
+  .mbtn.secondary{background:var(--bg2);color:var(--ink-muted);}
+  .mbtn.danger{background:var(--red-light);color:var(--red);}
+
+  @media(max-width:600px){
+    .activity-grid{grid-template-columns:repeat(3,1fr);}
+    .wb-pts-item{padding:6px 10px;}
+    .wb-pts-num{font-size:18px;}
+  }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-emoji">🔒</div>
+    <h1>AJS + MJB LOCK IN</h1>
+    <p>13 Apr – 10 May 2026 · 4 weeks<br>Who are you?</p>
+    <div class="login-btns">
+      <button class="login-btn mjb" onclick="login('MJB')">MJB 🩷</button>
+      <button class="login-btn ajs" onclick="login('AJS')">AJS 💚</button>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <header>
+    <div class="header-title">🔒 LOCK IN</div>
+    <div class="header-right">
+      <div class="header-pts" id="headerPts">— pts</div>
+      <button class="header-user" id="headerUser" onclick="logout()">— ↩</button>
+    </div>
+  </header>
+  <nav class="tabs">
+    <div class="tab active" data-section="thisweek">This Week</div>
+    <div class="tab" data-section="planner">Month Planner</div>
+    <div class="tab" data-section="rewards">Rewards</div>
+    <div class="tab" data-section="points">Points</div>
+  </nav>
+  <main>
+
+    <!-- TAB 1 -->
+    <section id="thisweek" class="section active">
+      <div class="week-banner">
+        <div class="wb-left">
+          <h2 id="wbTitle">Week 1</h2>
+          <p id="wbDates">13 Apr – 19 Apr</p>
+        </div>
+        <div class="wb-pts">
+          <div class="wb-pts-item"><div class="wb-pts-name">MJB 🩷</div><div class="wb-pts-num" id="wbMjb">0</div></div>
+          <div class="wb-pts-item"><div class="wb-pts-name">AJS 💚</div><div class="wb-pts-num" id="wbAjs">0</div></div>
+        </div>
+      </div>
+      <div class="day-strip" id="dayStrip"></div>
+      <div class="day-card">
+        <div class="day-card-header">
+          <h3 id="dayCardTitle">—</h3>
+          <span id="dayCardBadge"></span>
+        </div>
+        <div class="day-section">
+          <div class="day-section-title">Daily Ticks</div>
+          <div class="ticks-row" id="ticksRow"></div>
+        </div>
+        <div class="day-section">
+          <div class="day-section-title">Meals — tap to plan or edit</div>
+          <div id="mealsInline"></div>
+        </div>
+        <div class="day-section">
+          <div class="day-section-title">Activities — tap to log</div>
+          <div class="activity-grid" id="actGrid"></div>
+          <div style="margin-top:12px">
+            <div class="day-section-title" style="margin-bottom:8px">Shared Goals</div>
+            <div class="activity-grid" id="sharedActGrid"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2 -->
+    <section id="planner" class="section">
+      <div class="planner-week-nav">
+        <button class="nav-btn" id="planPrev">← Prev</button>
+        <h3 id="planWeekLabel">Week 1</h3>
+        <button class="nav-btn" id="planNext">Next →</button>
+      </div>
+      <div class="planner-scroll">
+        <div class="planner-grid" id="plannerGrid"></div>
+      </div>
+      <div style="margin-top:10px;font-size:12px;color:var(--ink-muted);text-align:center">Tap a meal cell to plan · Tap a planned meal to mark as eaten ✓ · Activity cells jump to This Week tab</div>
+    </section>
+
+    <!-- TAB 3 -->
+    <section id="rewards" class="section">
+      <div class="card">
+        <div style="font-family:'Fraunces',serif;font-size:15px;color:var(--ink);margin-bottom:12px">This week's points</div>
+        <div class="pts-bars" id="ptsBars"></div>
+      </div>
+      <div id="punishments"></div>
+      <div class="sec-label">Weekly Rewards</div>
+      <p style="font-size:13px;color:var(--ink-muted);margin-bottom:1rem">Both need to hit the threshold to unlock. Using Mon–Thu = cost + 5 pts penalty.</p>
+      <div class="rewards-grid" id="rewardsGrid"></div>
+      <button class="add-reward-btn" onclick="openAddReward()">+ Add custom reward</button>
+    </section>
+
+    <!-- TAB 4 -->
+    <section id="points" class="section">
+      <div class="pts-total-grid">
+        <div class="pts-total-card mjb"><div class="ptc-name">MJB 🩷</div><div class="ptc-num" id="mjbTotal">0</div><div class="ptc-label">total pts</div></div>
+        <div class="pts-total-card ajs"><div class="ptc-name">AJS 💚</div><div class="ptc-num" id="ajsTotal">0</div><div class="ptc-label">total pts</div></div>
+      </div>
+      <div class="sec-label">Week by week</div>
+      <div class="week-breakdown" id="weekBreakdown"></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- MEAL MODAL -->
+<div class="modal-overlay" id="mealModal" style="display:none" onclick="if(event.target===this)closeMealModal()">
+  <div class="modal">
+    <h3 id="mealModalTitle">Meal</h3>
+    <div class="modal-sub" id="mealModalSub"></div>
+    <textarea id="mealInput" placeholder="e.g. Salmon with roast veggies..."></textarea>
+    <div class="modal-btns">
+      <button class="mbtn secondary" onclick="closeMealModal()">Cancel</button>
+      <button class="mbtn danger" id="mealDeleteBtn" style="display:none" onclick="deleteMeal()">Delete</button>
+      <button class="mbtn primary" onclick="saveMeal()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD REWARD MODAL -->
+<div class="modal-overlay" id="rewardModal" style="display:none" onclick="if(event.target===this)closeRewardModal()">
+  <div class="modal">
+    <h3>Add custom reward</h3>
+    <div class="modal-sub">Set a name, emoji and points cost</div>
+    <div class="modal-row">
+      <input id="rewardEmoji" placeholder="Emoji 🎯" style="max-width:80px">
+      <input id="rewardName" placeholder="Reward name">
+    </div>
+    <input id="rewardCost" type="number" placeholder="Points cost each (e.g. 12)" min="1" max="99">
+    <div class="modal-btns">
+      <button class="mbtn secondary" onclick="closeRewardModal()">Cancel</button>
+      <button class="mbtn primary" onclick="saveReward()">Add</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCNHZaO9T1dFzawXIi5vzmklaE1xmnhRok",
+    authDomain: "lock-in-app-9996a.firebaseapp.com",
+    projectId: "lock-in-app-9996a",
+    storageBucket: "lock-in-app-9996a.firebasestorage.app",
+    messagingSenderId: "301861374322",
+    appId: "1:301861374322:web:08473fbb09ec99d2f2b5eb"
+  };
+  const fbApp = initializeApp(firebaseConfig);
+  const db = getFirestore(fbApp);
+
+  // CONSTANTS
+  const START = new Date(2026,3,13); // Month is 0-indexed: 3 = April
+  const DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const MEAL_TYPES = ['breakfast','lunch','dinner'];
+  const MEAL_LABELS = ['Breakfast','Lunch','Dinner'];
+  const ACTIVITIES = [
+    {id:'gym-push',name:'Gym — Push',icon:'💪',pts:3},
+    {id:'gym-pull',name:'Gym — Pull',icon:'🏋️',pts:3},
+    {id:'gym-legs',name:'Gym — Legs',icon:'🦵',pts:3},
+    {id:'gym-upper',name:'Gym — Upper',icon:'🔝',pts:3},
+    {id:'gym-lower',name:'Gym — Lower',icon:'⬇️',pts:3},
+    {id:'gym-total',name:'Gym — Total',icon:'🏆',pts:3},
+    {id:'run',name:'Run',icon:'🏃',pts:3},
+    {id:'pilates',name:'Pilates',icon:'🧘',pts:2},
+    {id:'yoga',name:'Yoga / Stretch',icon:'🌿',pts:2},
+    {id:'walk',name:'Walk',icon:'🚶',pts:1},
+  ];
+  const SHARED_ACTS = [
+    {id:'outside-together',name:'Outside Together',icon:'🌤️',pts:2},
+    {id:'run-together',name:'Run Together',icon:'👫',pts:3},
+  ];
+  const PRESET_REWARDS = [
+    {id:'coffee',name:'Cafe Coffee',icon:'☕',cost:8,custom:false},
+    {id:'lollies',name:'Lollies',icon:'🍬',cost:10,custom:false},
+    {id:'alcohol',name:'Alcohol',icon:'🍷',cost:15,custom:false},
+    {id:'takeaways',name:'Takeaways',icon:'🍜',cost:20,custom:false},
+  ];
+
+  // STATE
+  let currentUser = localStorage.getItem('lockin_user');
+  let selectedDay = dateStr(new Date());
+  let plannerWeek = currentWeekNum();
+  let mealCtx = null;
+
+  // UTILS
+  function dateStr(d){ const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}`; }
+  function today(){ return dateStr(new Date()); }
+  function isWeekend(ds){ const [y,m,d]=ds.split('-').map(Number); const dow=new Date(y,m-1,d).getDay(); return dow===0||dow===6; }
+  function currentWeekNum(){ const t=new Date(); t.setHours(0,0,0,0); const s=new Date(START); s.setHours(0,0,0,0); const diff=Math.floor((t-s)/(7*86400000)); return Math.max(0,Math.min(3,diff)); }
+  function getWeekDays(wk){
+    const days=[];
+    for(let i=0;i<7;i++){
+      const d=new Date(START);
+      d.setDate(d.getDate()+wk*7+i);
+      days.push(dateStr(d));
+    }
+    return days;
+  }
+  function fmtDate(ds){ return new Date(ds).toLocaleDateString('en-NZ',{day:'numeric',month:'short'}); }
+  function fmtFull(ds){ return new Date(ds).toLocaleDateString('en-NZ',{weekday:'long',day:'numeric',month:'long'}); }
+  function showToast(msg){
+    const t=document.getElementById('toast');
+    t.textContent=msg; t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'),2500);
+  }
+
+  // FIREBASE
+  async function fSet(col,id,data){ await setDoc(doc(db,col,id),data,{merge:true}); }
+  async function fGet(col,id){ const s=await getDoc(doc(db,col,id)); return s.exists()?s.data():null; }
+  async function fDel(col,id){ await deleteDoc(doc(db,col,id)); }
+  async function fGetAll(col){ const s=await getDocs(collection(db,col)); const r={}; s.forEach(d=>r[d.id]=d.data()); return r; }
+
+  // POINTS
+  async function getCustomRewards(){ const all=await fGetAll('custom_rewards'); return Object.entries(all).map(([id,v])=>({id,...v,custom:true})); }
+
+  async function calcWeekPts(user,wk){
+    let pts=0;
+    const days=getWeekDays(wk);
+    const customs=await getCustomRewards();
+    const allRewards=[...PRESET_REWARDS,...customs];
+    for(const d of days){
+      if(isWeekend(d)) continue;
+      const act=await fGet('acts',`${user}_${d}`);
+      if(act){
+        (act.logged||[]).forEach(id=>{const a=ACTIVITIES.find(x=>x.id===id);if(a)pts+=a.pts;});
+        (act.shared||[]).forEach(id=>{const a=SHARED_ACTS.find(x=>x.id===id);if(a)pts+=a.pts;});
+      }
+      const meal=await fGet('meals',d);
+      if(meal?.ticked) pts+=1;
+      const start=await fGet('starts',`${user}_${d}`);
+      if(start?.type==='early') pts+=2;
+      if(start?.type==='late') pts-=3;
+      const dow=new Date(d).getDay();
+      if(dow>=1&&dow<=4){
+        const ruse=await fGet('reward_use',`${user}_${d}`);
+        if(ruse?.used){const r=allRewards.find(x=>x.id===ruse.rewardId);if(r)pts-=(r.cost+5);}
+      }
+    }
+    return pts;
+  }
+
+  async function calcTotalPts(user){
+    let t=0; for(let w=0;w<4;w++) t+=await calcWeekPts(user,w); return t;
+  }
+
+  // LOGIN
+  window.login=function(user){
+    currentUser=user; localStorage.setItem('lockin_user',user);
+    document.getElementById('loginScreen').style.display='none';
+    document.getElementById('app').style.display='block';
+    initApp();
+  };
+  window.logout=function(){
+    localStorage.removeItem('lockin_user'); currentUser=null;
+    document.getElementById('loginScreen').style.display='flex';
+    document.getElementById('app').style.display='none';
+  };
+
+  // INIT
+  function initApp(){
+    const uel=document.getElementById('headerUser');
+    uel.textContent=currentUser+(currentUser==='MJB'?' 🩷 ↩':' 💚 ↩');
+    uel.className='header-user '+(currentUser==='MJB'?'mjb':'ajs');
+
+    document.querySelectorAll('.tab').forEach(tab=>{
+      tab.addEventListener('click',()=>{
+        document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+        document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(tab.dataset.section).classList.add('active');
+        const sec=tab.dataset.section;
+        if(sec==='thisweek') renderThisWeek();
+        if(sec==='planner') renderPlanner();
+        if(sec==='rewards') renderRewards();
+        if(sec==='points') renderPoints();
+      });
+    });
+
+    document.getElementById('planPrev').addEventListener('click',()=>{plannerWeek=Math.max(0,plannerWeek-1);renderPlanner();});
+    document.getElementById('planNext').addEventListener('click',()=>{plannerWeek=Math.min(3,plannerWeek+1);renderPlanner();});
+
+    selectedDay=today();
+    // Ensure selected day is within the 4-week range
+    const allDays=getWeekDays(0).concat(getWeekDays(1),getWeekDays(2),getWeekDays(3));
+    if(!allDays.includes(selectedDay)) selectedDay=dateStr(START);
+    renderThisWeek();
+  }
+
+  // TAB 1
+  async function renderThisWeek(){
+    const wk=currentWeekNum();
+    const days=getWeekDays(wk);
+    document.getElementById('wbTitle').textContent=`Week ${wk+1} of 4`;
+    document.getElementById('wbDates').textContent=`${fmtDate(days[0])} – ${fmtDate(days[6])}`;
+    const [mW,aW]=await Promise.all([calcWeekPts('MJB',wk),calcWeekPts('AJS',wk)]);
+    document.getElementById('wbMjb').textContent=mW;
+    document.getElementById('wbAjs').textContent=aW;
+    document.getElementById('headerPts').textContent=`${currentUser==='MJB'?mW:aW} pts`;
+    renderDayStrip(days);
+    await renderDayCard();
+  }
+
+  function renderDayStrip(days){
+    document.getElementById('dayStrip').innerHTML=days.map((d,i)=>{
+      const isTod=d===today(),isSel=d===selectedDay,wknd=isWeekend(d);
+      return `<div class="day-pill ${isTod?'is-today':''} ${isSel?'is-selected':''} ${wknd?'is-weekend':''}" onclick="selectDay('${d}')">
+        <div class="dp-name">${DAY_NAMES[i]}</div>
+        <div class="dp-num">${new Date(d).getDate()}</div>
+      </div>`;
+    }).join('');
+  }
+
+  window.selectDay=async function(d){ selectedDay=d; const wk=currentWeekNum(); const days=getWeekDays(wk); renderDayStrip(days); await renderDayCard(); };
+
+  async function renderDayCard(){
+    const d=selectedDay, wknd=isWeekend(d);
+    document.getElementById('dayCardTitle').textContent=fmtFull(d);
+    const badge=document.getElementById('dayCardBadge');
+    if(wknd){badge.textContent='Weekend 🎉';badge.className='weekend-badge';}
+    else{badge.textContent='';badge.className='';}
+    await Promise.all([renderTicks(d,wknd), renderMealsInline(d), renderActGrid(d,wknd)]);
+  }
+
+  async function renderTicks(d,wknd){
+    if(wknd){
+      document.getElementById('ticksRow').innerHTML='<span style="font-size:13px;color:var(--ink-muted)">No tracking on weekends — enjoy! 🎉</span>';
+      return;
+    }
+    const startSnap=await fGet('starts',`${currentUser}_${d}`);
+    const mealSnap=await fGet('meals',d);
+    const st=startSnap?.type||null, mealTicked=mealSnap?.ticked||false;
+    document.getElementById('ticksRow').innerHTML=`
+      <button class="tick-btn ${st==='early'?'on-good':''}" onclick="logStart('early')">🌅 Early start ${st==='early'?'✓ +2':'+2'}</button>
+      <button class="tick-btn ${st==='late'?'on-bad':''}" onclick="logStart('late')">😴 Late start ${st==='late'?'✓ -3':'-3'}</button>
+      <button class="tick-btn ${mealTicked?'on-good':''}" onclick="toggleMealTick('${d}')">🥦 Ate well ${mealTicked?'✓ +1':'+1'}</button>`;
+  }
+
+  async function renderMealsInline(d){
+    const snap=await fGet('meals',d);
+    document.getElementById('mealsInline').innerHTML=MEAL_TYPES.map((m,i)=>{
+      const val=snap?.[m]||'', eaten=snap?.ticked&&val;
+      return `<div class="meal-row">
+        <div class="meal-row-label">${MEAL_LABELS[i]}</div>
+        <div class="meal-cell-inline ${val?'has-meal':''} ${eaten?'eaten':''}" onclick="openMealModal('${d}','${m}',\`${(val||'').replace(/`/g,"'")}\`)">
+          ${val||'<span style="color:var(--border2)">+ Plan meal</span>'}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  async function renderActGrid(d,wknd){
+    const snap=await fGet('acts',`${currentUser}_${d}`);
+    const logged=snap?.logged||[], shared=snap?.shared||[];
+    const noClick=wknd?'style="opacity:0.4;pointer-events:none"':'';
+    document.getElementById('actGrid').innerHTML=ACTIVITIES.map(a=>`
+      <div class="act-card ${logged.includes(a.id)?'done':''}" ${noClick} onclick="toggleAct('${a.id}','${d}',false)">
+        <div class="act-check">✓</div>
+        <div class="ac-icon">${a.icon}</div>
+        <div class="ac-name">${a.name}</div>
+        <div class="ac-pts">+${a.pts} pts</div>
+      </div>`).join('');
+    document.getElementById('sharedActGrid').innerHTML=SHARED_ACTS.map(a=>`
+      <div class="act-card ${shared.includes(a.id)?'done-shared':''}" onclick="toggleAct('${a.id}','${d}',true)">
+        <div class="act-check">✓</div>
+        <div class="ac-icon">${a.icon}</div>
+        <div class="ac-name">${a.name}</div>
+        <div class="ac-pts">+${a.pts} each</div>
+      </div>`).join('');
+  }
+
+  window.logStart=async function(type){
+    const d=selectedDay;
+    const snap=await fGet('starts',`${currentUser}_${d}`);
+    const newType=snap?.type===type?null:type;
+    await fSet('starts',`${currentUser}_${d}`,{type:newType});
+    showToast(newType==='early'?'🌅 +2 pts!':newType==='late'?'😴 -3 pts':'Start removed');
+    renderTicks(d,false);
+    updateWeekPts();
+  };
+
+  window.toggleMealTick=async function(d){
+    const snap=await fGet('meals',d);
+    await fSet('meals',d,{ticked:!snap?.ticked});
+    showToast(!snap?.ticked?'🥦 +1 pt for eating well!':'Tick removed');
+    renderMealsInline(d);
+    updateWeekPts();
+  };
+
+  window.toggleAct=async function(id,d,isShared){
+    const snap=await fGet('acts',`${currentUser}_${d}`);
+    const key=isShared?'shared':'logged';
+    const cur=snap?.[key]||[];
+    const updated=cur.includes(id)?cur.filter(x=>x!==id):[...cur,id];
+    await fSet('acts',`${currentUser}_${d}`,{[key]:updated});
+    const act=isShared?SHARED_ACTS.find(a=>a.id===id):ACTIVITIES.find(a=>a.id===id);
+    showToast(cur.includes(id)?`${act.name} removed`:`${act.icon} +${act.pts} pts!`);
+    renderActGrid(d,false);
+    updateWeekPts();
+  };
+
+  async function updateWeekPts(){
+    const wk=currentWeekNum();
+    const [mW,aW]=await Promise.all([calcWeekPts('MJB',wk),calcWeekPts('AJS',wk)]);
+    document.getElementById('wbMjb').textContent=mW;
+    document.getElementById('wbAjs').textContent=aW;
+    document.getElementById('headerPts').textContent=`${currentUser==='MJB'?mW:aW} pts`;
+  }
+
+  // TAB 2: PLANNER
+  async function renderPlanner(){
+    const wk=plannerWeek, days=getWeekDays(wk);
+    document.getElementById('planWeekLabel').textContent=`Week ${wk+1} · ${fmtDate(days[0])} – ${fmtDate(days[6])}`;
+    document.getElementById('planPrev').disabled=wk===0;
+    document.getElementById('planNext').disabled=wk===3;
+
+    const mealData={};
+    for(const d of days) mealData[d]=await fGet('meals',d)||{};
+    const actMJB={}, actAJS={};
+    for(const d of days){ actMJB[d]=await fGet('acts',`MJB_${d}`)||{}; actAJS[d]=await fGet('acts',`AJS_${d}`)||{}; }
+
+    let html='<div></div>';
+    days.forEach((d,i)=>{
+      const wknd=isWeekend(d), isTod=d===today();
+      html+=`<div class="pg-header ${wknd?'weekend':''} ${isTod?'is-today':''}">${DAY_NAMES[i]}<br><span style="font-size:11px">${new Date(d).getDate()}</span></div>`;
+    });
+
+    MEAL_TYPES.forEach((m,mi)=>{
+      html+=`<div class="pg-label">${MEAL_LABELS[mi].slice(0,3)}</div>`;
+      days.forEach(d=>{
+        const wknd=isWeekend(d), val=mealData[d]?.[m]||'', eaten=mealData[d]?.ticked&&val;
+        html+=`<div class="pg-cell ${wknd?'weekend':''} ${eaten?'eaten':''}" onclick="openMealModal('${d}','${m}',\`${(val||'').replace(/`/g,"'")}\`)">
+          ${val?`<div class="pg-meal">${val}</div>`:'<div class="pg-add">+</div>'}
+        </div>`;
+      });
+    });
+
+    // MJB activities
+    html+=`<div class="pg-label" style="color:var(--mjb)">MJB</div>`;
+    days.forEach(d=>{
+      const wknd=isWeekend(d), logged=actMJB[d]?.logged||[];
+      html+=`<div class="pg-cell ${wknd?'weekend':''}" onclick="jumpToDay('${d}','MJB')">
+        ${logged.length?logged.map(id=>{const a=ACTIVITIES.find(x=>x.id===id);return a?`<span class="pg-act mjb">${a.icon}</span>`:''}).join(''):'<div class="pg-add">+</div>'}
+      </div>`;
+    });
+
+    // AJS activities
+    html+=`<div class="pg-label" style="color:var(--ajs)">AJS</div>`;
+    days.forEach(d=>{
+      const wknd=isWeekend(d), logged=actAJS[d]?.logged||[];
+      html+=`<div class="pg-cell ${wknd?'weekend':''}" onclick="jumpToDay('${d}','AJS')">
+        ${logged.length?logged.map(id=>{const a=ACTIVITIES.find(x=>x.id===id);return a?`<span class="pg-act ajs">${a.icon}</span>`:''}).join(''):'<div class="pg-add">+</div>'}
+      </div>`;
+    });
+
+    document.getElementById('plannerGrid').innerHTML=html;
+  }
+
+  window.jumpToDay=function(d,user){
+    if(user!==currentUser){showToast(`Switch to ${user} to edit their activities`);return;}
+    selectedDay=d;
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+    document.querySelector('[data-section="thisweek"]').classList.add('active');
+    document.getElementById('thisweek').classList.add('active');
+    renderThisWeek();
+    showToast(`Jumped to ${fmtDate(d)}`);
+  };
+
+  // MEAL MODAL
+  window.openMealModal=function(d,mealType,existing){
+    mealCtx={d,mealType};
+    document.getElementById('mealModalTitle').textContent=MEAL_LABELS[MEAL_TYPES.indexOf(mealType)];
+    document.getElementById('mealModalSub').textContent=fmtFull(d);
+    document.getElementById('mealInput').value=existing||'';
+    document.getElementById('mealDeleteBtn').style.display=existing?'block':'none';
+    document.getElementById('mealModal').style.display='flex';
+    setTimeout(()=>document.getElementById('mealInput').focus(),100);
+  };
+  window.closeMealModal=function(){document.getElementById('mealModal').style.display='none';mealCtx=null;};
+  window.saveMeal=async function(){
+    if(!mealCtx) return;
+    const val=document.getElementById('mealInput').value.trim();
+    if(!val) return;
+    await fSet('meals',mealCtx.d,{[mealCtx.mealType]:val});
+    closeMealModal(); showToast('Meal saved 🥘');
+    if(document.getElementById('thisweek').classList.contains('active')) renderMealsInline(selectedDay);
+    if(document.getElementById('planner').classList.contains('active')) renderPlanner();
+  };
+  window.deleteMeal=async function(){
+    if(!mealCtx) return;
+    await fSet('meals',mealCtx.d,{[mealCtx.mealType]:''});
+    closeMealModal(); showToast('Meal removed');
+    if(document.getElementById('thisweek').classList.contains('active')) renderMealsInline(selectedDay);
+    if(document.getElementById('planner').classList.contains('active')) renderPlanner();
+  };
+
+  // TAB 3: REWARDS
+  async function renderRewards(){
+    const wk=currentWeekNum();
+    const [mW,aW]=await Promise.all([calcWeekPts('MJB',wk),calcWeekPts('AJS',wk)]);
+    const maxRef=35;
+    document.getElementById('ptsBars').innerHTML=`
+      <div class="pts-bar-row"><div class="pts-bar-name mjb">MJB</div><div class="pts-track"><div class="pts-fill mjb" style="width:${Math.min(100,(mW/maxRef)*100)}%"></div></div><div class="pts-num">${mW} pts</div></div>
+      <div class="pts-bar-row"><div class="pts-bar-name ajs">AJS</div><div class="pts-track"><div class="pts-fill ajs" style="width:${Math.min(100,(aW/maxRef)*100)}%"></div></div><div class="pts-num">${aW} pts</div></div>`;
+
+    const customs=await getCustomRewards();
+    const allRewards=[...PRESET_REWARDS,...customs];
+
+    const days=getWeekDays(wk);
+    let punHtml='';
+    for(const user of ['MJB','AJS']){
+      for(const d of days){
+        const dow=new Date(d).getDay();
+        if(dow>=1&&dow<=4){
+          const snap=await fGet('reward_use',`${user}_${d}`);
+          if(snap?.used){const r=allRewards.find(x=>x.id===snap.rewardId);if(r)punHtml+=`<div class="punishment-row">⚠️ ${user} had ${r.name} on ${new Date(d).toLocaleDateString('en-NZ',{weekday:'short'})} — −${r.cost+5} pts</div>`;}
+        }
+      }
+    }
+    document.getElementById('punishments').innerHTML=punHtml;
+
+    const combined=mW+aW;
+    const todayDow=new Date().getDay(), isFriWknd=todayDow===5||todayDow===0||todayDow===6;
+    document.getElementById('rewardsGrid').innerHTML=allRewards.map(r=>{
+      const unlocked=combined>=r.cost;
+      return `<div class="reward-card ${unlocked?'unlocked':'locked'}" ${unlocked?`onclick="claimReward('${r.id}',${r.cost})"`:''}>
+        ${r.custom?`<button class="rc-delete visible" onclick="event.stopPropagation();deleteReward('${r.id}')">✕</button>`:''}
+        <div class="rc-icon">${r.icon}</div>
+        <div class="rc-name">${r.name}</div>
+        <div class="rc-cost">${r.cost} combined pts</div>
+        <div class="rc-status ${unlocked?'unlocked':'locked'}">${unlocked?(isFriWknd?'🎉 Unlocked!':'⚠️ Early = penalty'):`Need ${r.cost} combined pts`}</div>
+      </div>`;
+    }).join('');
+  }
+
+  window.claimReward=async function(rewardId,cost){
+    const dow=new Date().getDay();
+    if(dow>=1&&dow<=4){
+      if(!confirm(`Using this on a weekday costs ${cost+5} pts penalty. Sure?`)) return;
+      await fSet('reward_use',`${currentUser}_${today()}`,{used:true,rewardId});
+      showToast(`⚠️ Penalty: −${cost+5} pts`);
+    } else { showToast('🎉 Enjoy your reward!'); }
+    renderRewards();
+  };
+
+  window.openAddReward=function(){document.getElementById('rewardModal').style.display='flex';};
+  window.closeRewardModal=function(){document.getElementById('rewardModal').style.display='none';};
+  window.saveReward=async function(){
+    const icon=document.getElementById('rewardEmoji').value.trim()||'🎯';
+    const name=document.getElementById('rewardName').value.trim();
+    const cost=parseInt(document.getElementById('rewardCost').value);
+    if(!name||!cost){showToast('Fill in name and points');return;}
+    const id='custom_'+Date.now();
+    await fSet('custom_rewards',id,{icon,name,cost});
+    closeRewardModal();
+    ['rewardEmoji','rewardName','rewardCost'].forEach(x=>document.getElementById(x).value='');
+    showToast(`${icon} ${name} added!`);
+    renderRewards();
+  };
+  window.deleteReward=async function(id){
+    if(!confirm('Delete this reward?')) return;
+    await fDel('custom_rewards',id); showToast('Reward removed'); renderRewards();
+  };
+
+  // TAB 4: POINTS
+  async function renderPoints(){
+    const [mT,aT]=await Promise.all([calcTotalPts('MJB'),calcTotalPts('AJS')]);
+    document.getElementById('mjbTotal').textContent=mT;
+    document.getElementById('ajsTotal').textContent=aT;
+    const wk=currentWeekNum();
+    let rows='<div class="wb-row header-row"><div>Week</div><div>MJB 🩷</div><div>AJS 💚</div></div>';
+    for(let w=0;w<4;w++){
+      const [mP,aP]=await Promise.all([calcWeekPts('MJB',w),calcWeekPts('AJS',w)]);
+      const days=getWeekDays(w);
+      rows+=`<div class="wb-row ${w===wk?'current-week':''}">
+        <div class="wb-week">Wk ${w+1}<br><span style="font-size:10px;color:var(--ink-muted)">${fmtDate(days[0])}</span></div>
+        <div class="wb-pts-cell mjb">${mP} pts</div>
+        <div class="wb-pts-cell ajs">${aP} pts</div>
+      </div>`;
+    }
+    document.getElementById('weekBreakdown').innerHTML=rows;
+  }
+
+  // AUTO LOGIN
+  if(currentUser){
+    document.getElementById('loginScreen').style.display='none';
+    document.getElementById('app').style.display='block';
+    initApp();
+  }
+</script>
+</body>
+</html>
