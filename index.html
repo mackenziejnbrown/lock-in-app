@@ -391,6 +391,27 @@
   </div>
 </div>
 
+<!-- QUANTITY MODAL -->
+<div class="modal-overlay" id="qtyModal" style="display:none" onclick="if(event.target===this)closeQtyModal()">
+  <div class="modal">
+    <h3 id="qtyModalTitle">How many?</h3>
+    <div class="modal-sub" id="qtyModalSub"></div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin:1.25rem 0">
+      <button class="mbtn secondary" onclick="changeQty(-1)" style="width:44px;height:44px;font-size:20px;flex:none;padding:0">−</button>
+      <div style="text-align:center">
+        <div style="font-family:'Fraunces',serif;font-size:42px;font-weight:700;color:var(--ink);line-height:1" id="qtyNum">1</div>
+        <div style="font-size:13px;color:var(--ink-muted);margin-top:4px" id="qtyCost">= 5 pts</div>
+      </div>
+      <button class="mbtn secondary" onclick="changeQty(1)" style="width:44px;height:44px;font-size:20px;flex:none;padding:0">+</button>
+    </div>
+    <div id="qtyWarning" style="font-size:13px;color:var(--red);text-align:center;margin-bottom:12px;display:none"></div>
+    <div class="modal-btns">
+      <button class="mbtn secondary" onclick="closeQtyModal()">Cancel</button>
+      <button class="mbtn primary" id="qtyConfirmBtn" onclick="confirmQtyClaim()">Confirm</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script type="module">
@@ -430,11 +451,11 @@
     {id:'run-together',name:'Run Together',icon:'👫',pts:3},
   ];
   const PRESET_REWARDS = [
-    {id:'coffee',name:'Cafe Coffee',icon:'☕',cost:8,custom:false},
+    {id:'coffee',name:'Cafe Coffee',icon:'☕',cost:5,custom:false},
     {id:'lollies',name:'Handful of Lollies',icon:'🍬',cost:3,custom:false},
     {id:'ramyun',name:'Shin Ramyun',icon:'🍜',cost:5,custom:false},
-    {id:'alcohol',name:'Alcohol',icon:'🍷',cost:15,custom:false},
-    {id:'takeaways',name:'Takeaways',icon:'🥡',cost:20,custom:false},
+    {id:'alcohol',name:'Alcoholic Drink',icon:'🍷',cost:5,custom:false},
+    {id:'takeaways',name:'Takeaways',icon:'🥡',cost:15,custom:false},
   ];
 
   // STATE
@@ -465,63 +486,75 @@
     setTimeout(()=>t.classList.remove('show'),2500);
   }
 
-  // FIREBASE
+  // FIREBASE — write helpers
   async function fSet(col,id,data){ await setDoc(doc(db,col,id),data,{merge:true}); }
   async function fGet(col,id){ const s=await getDoc(doc(db,col,id)); return s.exists()?s.data():null; }
   async function fDel(col,id){ await deleteDoc(doc(db,col,id)); }
   async function fGetAll(col){ const s=await getDocs(collection(db,col)); const r={}; s.forEach(d=>r[d.id]=d.data()); return r; }
 
-  // POINTS
-  async function getCustomRewards(){ const all=await fGetAll('custom_rewards'); return Object.entries(all).map(([id,v])=>({id,...v,custom:true})); }
+  // LOCAL DATA CACHE — bulk fetch all collections at once, hold in memory
+  let _cache = {};
+  async function loadAllData(){
+    // Fetch all collections in parallel — single round trip per collection
+    const [acts, shared_acts, meals, starts, reward_use, custom_rewards, pts_cache, wallet] = await Promise.all([
+      fGetAll('acts'), fGetAll('shared_acts'), fGetAll('meals'),
+      fGetAll('starts'), fGetAll('reward_use'), fGetAll('custom_rewards'),
+      fGetAll('pts_cache'), fGetAll('wallet')
+    ]);
+    _cache = { acts, shared_acts, meals, starts, reward_use, custom_rewards, pts_cache, wallet };
+  }
+  function cGet(col, id){ return _cache[col]?.[id] || null; }
+  function getCustomRewardsFromCache(){ return Object.entries(_cache.custom_rewards||{}).map(([id,v])=>({id,...v,custom:true})); }
 
-  async function calcWeekPts(user,wk){
+  // POINTS — all reads from local cache, no awaits needed
+  function calcWeekPtsSync(user, wk){
     let pts=0;
     const days=getWeekDays(wk);
-    const customs=await getCustomRewards();
+    const customs=getCustomRewardsFromCache();
     const allRewards=[...PRESET_REWARDS,...customs];
     for(const d of days){
       if(isWeekend(d)) continue;
-      const act=await fGet('acts',`${user}_${d}`);
+      const act=cGet('acts',`${user}_${d}`);
       if(act){ (act.logged||[]).forEach(id=>{const a=ACTIVITIES.find(x=>x.id===id);if(a)pts+=a.pts;}); }
-      const sharedAct=await fGet('shared_acts',d);
+      const sharedAct=cGet('shared_acts',d);
       if(sharedAct){ (sharedAct.logged||[]).forEach(id=>{const a=SHARED_ACTS.find(x=>x.id===id);if(a)pts+=a.pts;}); }
-      const meal=await fGet('meals',d);
+      const meal=cGet('meals',d);
       if(meal?.ticked) pts+=1;
-      const start=await fGet('starts',`${user}_${d}`);
+      const start=cGet('starts',`${user}_${d}`);
       if(start?.type==='early') pts+=2;
       if(start?.type==='late') pts-=3;
       const dow=new Date(d).getDay();
       if(dow>=1&&dow<=4){
-        const ruse=await fGet('reward_use',`${user}_${d}`);
+        const ruse=cGet('reward_use',`${user}_${d}`);
         if(ruse?.used){const r=allRewards.find(x=>x.id===ruse.rewardId);if(r)pts-=(r.cost+5);}
       }
     }
     return pts;
   }
+  function calcTotalPtsSync(user){ let t=0; for(let w=0;w<4;w++) t+=calcWeekPtsSync(user,w); return t; }
+
+  // Keep async wrappers for backward compat with cache refresh calls
+  async function calcWeekPts(user,wk){ return calcWeekPtsSync(user,wk); }
+  async function calcTotalPts(user){ return calcTotalPtsSync(user); }
 
   async function calcTotalPts(user){
     let t=0; for(let w=0;w<4;w++) t+=await calcWeekPts(user,w); return t;
   }
 
-  // Write cached points after any log action — makes Rewards/Points tabs instant
+  // refreshCache writes pts_cache to Firebase (background, after writes)
   async function refreshCache(user){
     const weekPts=[];
-    for(let w=0;w<4;w++) weekPts.push(await calcWeekPts(user,w));
+    for(let w=0;w<4;w++) weekPts.push(calcWeekPtsSync(user,w));
     const total=weekPts.reduce((a,b)=>a+b,0);
     await fSet('pts_cache',user,{weekPts,total,updatedAt:Date.now()});
+    // Update local cache too
+    if(!_cache.pts_cache) _cache.pts_cache={};
+    _cache.pts_cache[user]={weekPts,total};
   }
 
-  // Read from cache (falls back to live calc if cache missing)
-  async function getCachedWeekPts(user,wk){
-    const c=await fGet('pts_cache',user);
-    if(c?.weekPts?.[wk]!==undefined) return c.weekPts[wk];
-    return await calcWeekPts(user,wk);
-  }
-  async function getCachedTotalPts(user){
-    const c=await fGet('pts_cache',user);
-    if(c?.total!==undefined) return c.total;
-    return await calcTotalPts(user);
-  }
+  // These now just read from local cache synchronously
+  async function getCachedWeekPts(user,wk){ return calcWeekPtsSync(user,wk); }
+  async function getCachedTotalPts(user){ return calcTotalPtsSync(user); }
 
   // LOGIN
   window.login=function(user){
@@ -568,6 +601,7 @@
 
   // TAB 1
   async function renderThisWeek(){
+    await loadAllData();
     const wk=currentWeekNum();
     const days=getWeekDays(wk);
     document.getElementById('wbTitle').textContent=`Week ${wk+1} of 4`;
@@ -606,8 +640,8 @@
       document.getElementById('ticksRow').innerHTML='<span style="font-size:13px;color:var(--ink-muted)">No tracking on weekends — enjoy! 🎉</span>';
       return;
     }
-    const startSnap=await fGet('starts',`${currentUser}_${d}`);
-    const mealSnap=await fGet('meals',d);
+    const startSnap=cGet('starts',`${currentUser}_${d}`);
+    const mealSnap=cGet('meals',d);
     const st=startSnap?.type||null, mealTicked=mealSnap?.ticked||false;
     document.getElementById('ticksRow').innerHTML=`
       <button class="tick-btn ${st==='early'?'on-good':''}" onclick="logStart('early')">🌅 Early start ${st==='early'?'✓ +2':'+2'}</button>
@@ -616,7 +650,7 @@
   }
 
   async function renderMealsInline(d){
-    const snap=await fGet('meals',d);
+    const snap=cGet('meals',d);
     document.getElementById('mealsInline').innerHTML=MEAL_TYPES.map((m,i)=>{
       const val=snap?.[m]||'', eaten=snap?.ticked&&val;
       return `<div class="meal-row">
@@ -629,8 +663,8 @@
   }
 
   async function renderActGrid(d,wknd){
-    const snap=await fGet('acts',`${currentUser}_${d}`);
-    const sharedSnap=await fGet('shared_acts',d);
+    const snap=cGet('acts',`${currentUser}_${d}`);
+    const sharedSnap=cGet('shared_acts',d);
     const logged=snap?.logged||[], shared=sharedSnap?.logged||[];
     const noClick=wknd?'style="opacity:0.4;pointer-events:none"':'';
     document.getElementById('actGrid').innerHTML=ACTIVITIES.map(a=>`
@@ -651,17 +685,19 @@
 
   window.logStart=async function(type){
     const d=selectedDay;
-    const snap=await fGet('starts',`${currentUser}_${d}`);
+    const snap=cGet('starts',`${currentUser}_${d}`);
     const newType=snap?.type===type?null:type;
     await fSet('starts',`${currentUser}_${d}`,{type:newType});
+    if(!_cache.starts) _cache.starts={};
+    _cache.starts[`${currentUser}_${d}`]={type:newType};
     showToast(newType==='early'?'🌅 +2 pts!':newType==='late'?'😴 -3 pts':'Start removed');
     renderTicks(d,false);
-    await refreshCache(currentUser);
+    refreshCache(currentUser);
     updateWeekPts();
   };
 
   window.toggleMealTick=async function(d){
-    const snap=await fGet('meals',d);
+    const snap=cGet('meals',d);
     await fSet('meals',d,{ticked:!snap?.ticked});
     showToast(!snap?.ticked?'🥦 +1 pt for eating well!':'Tick removed');
     renderMealsInline(d);
@@ -672,7 +708,7 @@
   window.toggleAct=async function(id,d,isShared){
     if(isShared){
       // Shared activities stored in a shared doc, not per user
-      const snap=await fGet('shared_acts',d);
+      const snap=cGet('shared_acts',d);
       const cur=snap?.logged||[];
       const updated=cur.includes(id)?cur.filter(x=>x!==id):[...cur,id];
       await fSet('shared_acts',d,{logged:updated});
@@ -683,7 +719,7 @@
       updateWeekPts();
       return;
     }
-    const snap=await fGet('acts',`${currentUser}_${d}`);
+    const snap=cGet('acts',`${currentUser}_${d}`);
     const cur=snap?.logged||[];
     const updated=cur.includes(id)?cur.filter(x=>x!==id):[...cur,id];
     await fSet('acts',`${currentUser}_${d}`,{logged:updated});
@@ -695,8 +731,9 @@
   };
 
   async function updateWeekPts(){
+    await loadAllData();
     const wk=currentWeekNum();
-    const [mW,aW]=await Promise.all([calcWeekPts('MJB',wk),calcWeekPts('AJS',wk)]);
+    const mW=calcWeekPtsSync('MJB',wk), aW=calcWeekPtsSync('AJS',wk);
     document.getElementById('wbMjb').textContent=mW;
     document.getElementById('wbAjs').textContent=aW;
     document.getElementById('headerPts').textContent=`${currentUser==='MJB'?mW:aW} pts`;
@@ -704,15 +741,17 @@
 
   // TAB 2: PLANNER
   async function renderPlanner(){
+    await loadAllData();
     const wk=plannerWeek, days=getWeekDays(wk);
     document.getElementById('planWeekLabel').textContent=`Week ${wk+1} · ${fmtDate(days[0])} – ${fmtDate(days[6])}`;
     document.getElementById('planPrev').disabled=wk===0;
     document.getElementById('planNext').disabled=wk===3;
 
+    // All data already in _cache from loadAllData
     const mealData={};
-    for(const d of days) mealData[d]=await fGet('meals',d)||{};
+    for(const d of days) mealData[d]=cGet('meals',d)||{};
     const actMJB={}, actAJS={};
-    for(const d of days){ actMJB[d]=await fGet('acts',`MJB_${d}`)||{}; actAJS[d]=await fGet('acts',`AJS_${d}`)||{}; }
+    for(const d of days){ actMJB[d]=cGet('acts',`MJB_${d}`)||{}; actAJS[d]=cGet('acts',`AJS_${d}`)||{}; }
 
     let html='<div></div>';
     days.forEach((d,i)=>{
@@ -790,42 +829,42 @@
     if(document.getElementById('planner').classList.contains('active')) renderPlanner();
   };
 
-  // Helper: get day breakdown for a user
-  async function getDayBreakdown(user, d){
+  // Helper: get day breakdown from local cache (no Firebase calls)
+  function getDayBreakdown(user, d){
     const items=[];
-    const act=await fGet('acts',`${user}_${d}`);
+    const act=cGet('acts',`${user}_${d}`);
     if(act) (act.logged||[]).forEach(id=>{const a=ACTIVITIES.find(x=>x.id===id);if(a)items.push({label:`${a.icon} ${a.name}`,pts:a.pts,pos:true});});
-    const sharedAct=await fGet('shared_acts',d);
+    const sharedAct=cGet('shared_acts',d);
     if(sharedAct) (sharedAct.logged||[]).forEach(id=>{const a=SHARED_ACTS.find(x=>x.id===id);if(a)items.push({label:`${a.icon} ${a.name}`,pts:a.pts,pos:true});});
-    const meal=await fGet('meals',d);
+    const meal=cGet('meals',d);
     if(meal?.ticked) items.push({label:'🥦 Ate well',pts:1,pos:true});
-    const start=await fGet('starts',`${user}_${d}`);
+    const start=cGet('starts',`${user}_${d}`);
     if(start?.type==='early') items.push({label:'🌅 Early start',pts:2,pos:true});
     if(start?.type==='late') items.push({label:'😴 Late start',pts:-3,pos:false});
     const dow=new Date(d).getDay();
     if(dow>=1&&dow<=4){
-      const customs=await getCustomRewards();
+      const customs=getCustomRewardsFromCache();
       const allRewards=[...PRESET_REWARDS,...customs];
-      const ruse=await fGet('reward_use',`${user}_${d}`);
+      const ruse=cGet('reward_use',`${user}_${d}`);
       if(ruse?.used){const r=allRewards.find(x=>x.id===ruse.rewardId);if(r)items.push({label:`⚠️ Early ${r.name}`,pts:-(r.cost+5),pos:false});}
     }
     return items;
   }
 
-  async function renderScorecard(wk, containerId){
+  function renderScorecard(wk, containerId){
     const days=getWeekDays(wk);
     const weekdays=days.filter(d=>!isWeekend(d));
     let html='';
     for(const d of weekdays){
-      const [mjbItems,ajsItems]=await Promise.all([getDayBreakdown('MJB',d),getDayBreakdown('AJS',d)]);
+      const mjbItems=getDayBreakdown('MJB',d), ajsItems=getDayBreakdown('AJS',d);
       const dayName=new Date(d).toLocaleDateString('en-NZ',{weekday:'short',day:'numeric'});
-      const renderItems=(items,user)=>items.length
+      const renderItems=(items)=>items.length
         ?items.map(x=>`<span class="sc-item ${x.pos?'pos':'neg'}">${x.label} ${x.pts>0?'+':''}${x.pts}</span>`).join('')
         :`<span class="sc-item neutral">Nothing logged</span>`;
       html+=`<div class="sc-row">
         <div class="sc-day">${dayName}</div>
-        <div class="sc-items">${renderItems(mjbItems,'MJB')}</div>
-        <div class="sc-items">${renderItems(ajsItems,'AJS')}</div>
+        <div class="sc-items">${renderItems(mjbItems)}</div>
+        <div class="sc-items">${renderItems(ajsItems)}</div>
       </div>`;
     }
     const header=`<div class="sc-row" style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--ink-muted);padding-bottom:6px">
@@ -836,12 +875,13 @@
 
   // TAB 3: REWARDS
   async function renderRewards(){
+    await loadAllData(); // single bulk fetch of all collections
     const wk=currentWeekNum();
-    const [mW,aW]=await Promise.all([getCachedWeekPts('MJB',wk),getCachedWeekPts('AJS',wk)]);
+    const mW=calcWeekPtsSync('MJB',wk), aW=calcWeekPtsSync('AJS',wk);
 
     // Wallet: total earned across all weeks minus spent
-    const [mT,aT]=await Promise.all([getCachedTotalPts('MJB'),getCachedTotalPts('AJS')]);
-    const spentSnap=await fGet('wallet','spent');
+    const mT=calcTotalPtsSync('MJB'), aT=calcTotalPtsSync('AJS');
+    const spentSnap=cGet('wallet','spent');
     const totalSpent=spentSnap?.total||0;
     const walletTotal=Math.max(0,(mT+aT)-totalSpent);
     document.getElementById('walletTotal').textContent=walletTotal;
@@ -856,9 +896,9 @@
     };
     document.getElementById('ptsBars').innerHTML=mkBar('MJB',mW,'mjb')+mkBar('AJS',aW,'ajs');
 
-    await renderScorecard(wk,'rewardsScorecard');
+    renderScorecard(wk,'rewardsScorecard');
 
-    const customs=await getCustomRewards();
+    const customs=getCustomRewardsFromCache();
     const allRewards=[...PRESET_REWARDS,...customs];
     const days=getWeekDays(wk);
     let punHtml='';
@@ -866,7 +906,7 @@
       for(const d of days){
         const dow=new Date(d).getDay();
         if(dow>=1&&dow<=4){
-          const snap=await fGet('reward_use',`${user}_${d}`);
+          const snap=cGet('reward_use',`${user}_${d}`);
           if(snap?.used){const r=allRewards.find(x=>x.id===snap.rewardId);if(r)punHtml+=`<div class="punishment-row">⚠️ ${user} had ${r.name} on ${new Date(d).toLocaleDateString('en-NZ',{weekday:'short'})} — −${r.cost+5} pts</div>`;}
         }
       }
@@ -886,25 +926,70 @@
     }).join('');
   }
 
-  window.claimReward=async function(rewardId,cost){
-    const r=PRESET_REWARDS.find(x=>x.id===rewardId);
+  let _qtyCtx = null;
+  let _qty = 1;
+
+  window.claimReward=function(rewardId,cost){
+    const customs=getCustomRewardsFromCache();
+    const allRewards=[...PRESET_REWARDS,...customs];
+    const r=allRewards.find(x=>x.id===rewardId);
     const name=r?r.name:rewardId;
+    _qtyCtx={rewardId,cost,name,icon:r?.icon||'🎯'};
+    _qty=1;
     const dow=new Date().getDay();
     const penalty=dow>=1&&dow<=4;
-    if(penalty){
-      if(!confirm(`Using ${name} on a weekday costs ${cost+5} pts penalty (${cost} + 5). Sure?`)) return;
-      await fSet('reward_use',`${currentUser}_${today()}`,{used:true,rewardId});
-      await refreshCache(currentUser);
-      // Deduct cost + penalty from wallet
-      const spentSnap=await fGet('wallet','spent');
-      await fSet('wallet','spent',{total:(spentSnap?.total||0)+(cost+5)});
-      showToast(`⚠️ Penalty applied — ${cost+5} pts deducted`);
+    document.getElementById('qtyModalTitle').textContent=`${r?.icon||''} ${name}`;
+    document.getElementById('qtyModalSub').textContent=penalty
+      ?`⚠️ Weekday penalty applies: cost + 5 pts per item`
+      :`Each costs ${cost} pts from your shared wallet`;
+    updateQtyDisplay();
+    document.getElementById('qtyModal').style.display='flex';
+  };
+
+  window.changeQty=function(delta){
+    _qty=Math.max(1,_qty+delta);
+    updateQtyDisplay();
+  };
+
+  function updateQtyDisplay(){
+    if(!_qtyCtx) return;
+    const dow=new Date().getDay();
+    const penalty=dow>=1&&dow<=4;
+    const perItem=penalty?(_qtyCtx.cost+5):_qtyCtx.cost;
+    const total=_qty*perItem;
+    document.getElementById('qtyNum').textContent=_qty;
+    document.getElementById('qtyCost').textContent=`= ${total} pts${penalty?' (incl. penalty)':''} `;
+    const walletTotal=parseInt(document.getElementById('walletTotal').textContent)||0;
+    const warn=document.getElementById('qtyWarning');
+    if(total>walletTotal){
+      warn.textContent=`Not enough pts — you have ${walletTotal} but need ${total}`;
+      warn.style.display='block';
+      document.getElementById('qtyConfirmBtn').disabled=true;
     } else {
-      // Deduct just the cost
-      const spentSnap=await fGet('wallet','spent');
-      await fSet('wallet','spent',{total:(spentSnap?.total||0)+cost});
-      showToast(`🎉 Enjoy your ${name}! −${cost} pts`);
+      warn.style.display='none';
+      document.getElementById('qtyConfirmBtn').disabled=false;
     }
+  }
+
+  window.closeQtyModal=function(){ document.getElementById('qtyModal').style.display='none'; _qtyCtx=null; };
+
+  window.confirmQtyClaim=async function(){
+    if(!_qtyCtx) return;
+    const dow=new Date().getDay();
+    const penalty=dow>=1&&dow<=4;
+    const perItem=penalty?(_qtyCtx.cost+5):_qtyCtx.cost;
+    const total=_qty*perItem;
+    if(penalty){
+      await fSet('reward_use',`${currentUser}_${today()}`,{used:true,rewardId:_qtyCtx.rewardId,qty:_qty});
+      await refreshCache(currentUser);
+    }
+    const spentSnap=cGet('wallet','spent');
+    const newSpent=(spentSnap?.total||0)+total;
+    await fSet('wallet','spent',{total:newSpent});
+    if(!_cache.wallet) _cache.wallet={};
+    _cache.wallet['spent']={total:newSpent};
+    closeQtyModal();
+    showToast(penalty?`⚠️ −${total} pts penalty applied`:`🎉 Enjoy ${_qty > 1 ? 'x'+_qty+' ':'your '}${_qtyCtx.name}! −${total} pts`);
     renderRewards();
   };
 
@@ -929,13 +1014,14 @@
 
   // TAB 4: POINTS
   async function renderPoints(){
-    const [mT,aT]=await Promise.all([getCachedTotalPts('MJB'),getCachedTotalPts('AJS')]);
+    await loadAllData();
+    const mT=calcTotalPtsSync('MJB'), aT=calcTotalPtsSync('AJS');
     document.getElementById('mjbTotal').textContent=mT;
     document.getElementById('ajsTotal').textContent=aT;
     const wk=currentWeekNum();
     let rows='<div class="wb-row header-row" style="cursor:default"><div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--ink-muted)">Week</div><div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--mjb)">MJB 🩷</div><div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--ajs)">AJS 💚</div></div>';
     for(let w=0;w<4;w++){
-      const [mP,aP]=await Promise.all([getCachedWeekPts('MJB',w),getCachedWeekPts('AJS',w)]);
+      const mP=calcWeekPtsSync('MJB',w), aP=calcWeekPtsSync('AJS',w);
       const days=getWeekDays(w);
       rows+=`<div class="wb-row ${w===wk?'current-week':''}" onclick="toggleWeekExpand(${w})">
         <div class="wb-week">Wk ${w+1} <span style="font-size:14px;color:var(--ink-muted)">▸</span><br><span style="font-size:10px;color:var(--ink-muted)">${fmtDate(days[0])}</span></div>
