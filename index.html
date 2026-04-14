@@ -291,7 +291,7 @@
           <span id="dayCardBadge"></span>
         </div>
         <div class="day-section">
-          <div class="day-section-title">Daily Ticks</div>
+          <div class="day-section-title">Morning Goals</div>
           <div class="ticks-row" id="ticksRow"></div>
         </div>
         <div class="day-section">
@@ -302,7 +302,7 @@
           <div class="day-section-title">Activities — tap to log</div>
           <div class="activity-grid" id="actGrid"></div>
           <div style="margin-top:12px">
-            <div class="day-section-title" style="margin-bottom:8px">Shared Goals</div>
+            <div class="day-section-title" style="margin-bottom:8px">Bonus Goals</div>
             <div class="activity-grid" id="sharedActGrid"></div>
           </div>
         </div>
@@ -319,7 +319,7 @@
       <div class="planner-scroll">
         <div class="planner-grid" id="plannerGrid"></div>
       </div>
-      <div style="margin-top:10px;font-size:12px;color:var(--ink-muted);text-align:center">Tap a meal cell to plan!</div>
+      <div style="margin-top:10px;font-size:12px;color:var(--ink-muted);text-align:center">Tap a meal cell to plan · Tap a planned meal to mark as eaten ✓ · Activity cells jump to This Week tab</div>
     </section>
 
     <!-- TAB 3 -->
@@ -383,7 +383,8 @@
       <input id="rewardEmoji" placeholder="Emoji 🎯" style="max-width:80px">
       <input id="rewardName" placeholder="Reward name">
     </div>
-    <input id="rewardCost" type="number" placeholder="Points cost each (e.g. 12)" min="1" max="99">
+    <input id="rewardCost" type="number" placeholder="Points cost (e.g. 5)" min="1" max="99">
+    <input id="rewardPenalty" type="number" placeholder="Weekday penalty pts (e.g. 3)" min="0" max="99">
     <div class="modal-btns">
       <button class="mbtn secondary" onclick="closeRewardModal()">Cancel</button>
       <button class="mbtn primary" onclick="saveReward()">Add</button>
@@ -441,21 +442,23 @@
     {id:'gym-upper',name:'Gym — Upper',icon:'🔝',pts:3},
     {id:'gym-lower',name:'Gym — Lower',icon:'⬇️',pts:3},
     {id:'gym-total',name:'Gym — Total',icon:'🏆',pts:3},
-    {id:'run',name:'Run',icon:'🏃',pts:3},
+    {id:'run',name:'Run',icon:'🏃',pts:4},
     {id:'pilates',name:'Pilates',icon:'🧘',pts:2},
     {id:'yoga',name:'Yoga / Stretch',icon:'🌿',pts:2},
     {id:'walk',name:'Walk',icon:'🚶',pts:1},
+    {id:'long-walk',name:'Long Walk',icon:'🥾',pts:3},
   ];
   const SHARED_ACTS = [
-    {id:'outside-together',name:'Outside Together',icon:'🌤️',pts:2},
-    {id:'run-together',name:'Run Together',icon:'👫',pts:3},
+    {id:'outside-together',name:'Outside Together',icon:'🌤️',pts:1},
+    {id:'run-together',name:'Run Together',icon:'👫',pts:1},
+    {id:'ate-well',name:'Ate Well',icon:'🥦',pts:1},
   ];
   const PRESET_REWARDS = [
-    {id:'coffee',name:'Cafe Coffee',icon:'☕',cost:5,custom:false},
-    {id:'lollies',name:'Handful of Lollies',icon:'🍬',cost:3,custom:false},
-    {id:'ramyun',name:'Shin Ramyun',icon:'🍜',cost:5,custom:false},
-    {id:'alcohol',name:'Alcoholic Drink',icon:'🍷',cost:5,custom:false},
-    {id:'takeaways',name:'Takeaways',icon:'🥡',cost:15,custom:false},
+    {id:'coffee',name:'Cafe Coffee',icon:'☕',cost:5,penalty:5,custom:false},
+    {id:'lollies',name:'Lollies',icon:'🍬',cost:1,penalty:1,custom:false},
+    {id:'ramyun',name:'Shin Ramyun',icon:'🍜',cost:5,penalty:3,custom:false},
+    {id:'alcohol',name:'Alcoholic Drink',icon:'🍷',cost:5,penalty:3,custom:false},
+    {id:'takeaways',name:'Takeaways',icon:'🥡',cost:15,penalty:5,custom:false},
   ];
 
   // STATE
@@ -518,15 +521,14 @@
       if(act){ (act.logged||[]).forEach(id=>{const a=ACTIVITIES.find(x=>x.id===id);if(a)pts+=a.pts;}); }
       const sharedAct=cGet('shared_acts',d);
       if(sharedAct){ (sharedAct.logged||[]).forEach(id=>{const a=SHARED_ACTS.find(x=>x.id===id);if(a)pts+=a.pts;}); }
-      const meal=cGet('meals',d);
-      if(meal?.ticked) pts+=1;
+      // Ate well is now tracked as a shared bonus goal, not a meal tick
       const start=cGet('starts',`${user}_${d}`);
       if(start?.type==='early') pts+=2;
       if(start?.type==='late') pts-=3;
       const dow=new Date(d).getDay();
       if(dow>=1&&dow<=4){
         const ruse=cGet('reward_use',`${user}_${d}`);
-        if(ruse?.used){const r=allRewards.find(x=>x.id===ruse.rewardId);if(r)pts-=(r.cost+5);}
+        if(ruse?.used){const r=allRewards.find(x=>x.id===ruse.rewardId);if(r)pts-=((r.penalty??5)+r.cost);}
       }
     }
     return pts;
@@ -637,12 +639,10 @@
       return;
     }
     const startSnap=cGet('starts',`${currentUser}_${d}`);
-    const mealSnap=cGet('meals',d);
-    const st=startSnap?.type||null, mealTicked=mealSnap?.ticked||false;
+    const st=startSnap?.type||null;
     document.getElementById('ticksRow').innerHTML=`
       <button class="tick-btn ${st==='early'?'on-good':''}" onclick="logStart('early')">🌅 Early start ${st==='early'?'✓ +2':'+2'}</button>
-      <button class="tick-btn ${st==='late'?'on-bad':''}" onclick="logStart('late')">😴 Late start ${st==='late'?'✓ -3':'-3'}</button>
-      <button class="tick-btn ${mealTicked?'on-good':''}" onclick="toggleMealTick('${d}')">🥦 Ate well ${mealTicked?'✓ +1':'+1'}</button>`;
+      <button class="tick-btn ${st==='late'?'on-bad':''}" onclick="logStart('late')">😴 Late start ${st==='late'?'✓ -3':'-3'}</button>`;
   }
 
   async function renderMealsInline(d){
@@ -832,8 +832,7 @@
     if(act) (act.logged||[]).forEach(id=>{const a=ACTIVITIES.find(x=>x.id===id);if(a)items.push({label:`${a.icon} ${a.name}`,pts:a.pts,pos:true});});
     const sharedAct=cGet('shared_acts',d);
     if(sharedAct) (sharedAct.logged||[]).forEach(id=>{const a=SHARED_ACTS.find(x=>x.id===id);if(a)items.push({label:`${a.icon} ${a.name}`,pts:a.pts,pos:true});});
-    const meal=cGet('meals',d);
-    if(meal?.ticked) items.push({label:'🥦 Ate well',pts:1,pos:true});
+    // Ate well tracked via shared acts
     const start=cGet('starts',`${user}_${d}`);
     if(start?.type==='early') items.push({label:'🌅 Early start',pts:2,pos:true});
     if(start?.type==='late') items.push({label:'😴 Late start',pts:-3,pos:false});
@@ -842,7 +841,7 @@
       const customs=getCustomRewardsFromCache();
       const allRewards=[...PRESET_REWARDS,...customs];
       const ruse=cGet('reward_use',`${user}_${d}`);
-      if(ruse?.used){const r=allRewards.find(x=>x.id===ruse.rewardId);if(r)items.push({label:`⚠️ Early ${r.name}`,pts:-(r.cost+5),pos:false});}
+      if(ruse?.used){const r=allRewards.find(x=>x.id===ruse.rewardId);if(r)items.push({label:`⚠️ Early ${r.name}`,pts:-((r.penalty??5)+r.cost),pos:false});}
     }
     return items;
   }
@@ -903,7 +902,7 @@
         const dow=new Date(d).getDay();
         if(dow>=1&&dow<=4){
           const snap=cGet('reward_use',`${user}_${d}`);
-          if(snap?.used){const r=allRewards.find(x=>x.id===snap.rewardId);if(r)punHtml+=`<div class="punishment-row">⚠️ ${user} had ${r.name} on ${new Date(d).toLocaleDateString('en-NZ',{weekday:'short'})} — −${r.cost+5} pts</div>`;}
+          if(snap?.used){const r=allRewards.find(x=>x.id===snap.rewardId);if(r)punHtml+=`<div class="punishment-row">⚠️ ${user} had ${r.name} on ${new Date(d).toLocaleDateString('en-NZ',{weekday:'short'})} — −${(r.penalty??5)+r.cost} pts</div>`;}
         }
       }
     }
@@ -912,12 +911,16 @@
     const todayDow=new Date().getDay(), isFriWknd=todayDow===5||todayDow===0||todayDow===6;
     document.getElementById('rewardsGrid').innerHTML=allRewards.map(r=>{
       const canAfford=walletTotal>=r.cost;
+      const penaltyPts=r.penalty??5;
+      const effectiveCost=isFriWknd?r.cost:(r.cost+penaltyPts);
+
       return `<div class="reward-card ${canAfford?'unlocked':'locked'}" ${canAfford?`onclick="claimReward('${r.id}',${r.cost})"`:''}>
         ${r.custom?`<button class="rc-delete visible" onclick="event.stopPropagation();deleteReward('${r.id}')">✕</button>`:''}
         <div class="rc-icon">${r.icon}</div>
         <div class="rc-name">${r.name}</div>
-        <div class="rc-cost">${r.cost} pts</div>
-        <div class="rc-status ${canAfford?'unlocked':'locked'}">${canAfford?(isFriWknd?'🎉 Afford it!':'⚠️ Early = penalty'):`Need ${r.cost} pts`}</div>
+        <div class="rc-cost" style="color:${isFriWknd?'var(--ink-muted)':'var(--red)'}">${isFriWknd?r.cost+' pts':effectiveCost+' pts today'}</div>
+        ${!isFriWknd?`<div style="font-size:10px;color:var(--ink-muted);margin-top:1px">${r.cost} + ${penaltyPts} penalty</div>`:''}
+        <div class="rc-status ${canAfford?'unlocked':'locked'}">${canAfford?(isFriWknd?'🎉 Afford it!':'⚠️ Weekday cost'):`Need ${isFriWknd?r.cost:effectiveCost} pts`}</div>
       </div>`;
     }).join('');
   }
@@ -930,13 +933,14 @@
     const allRewards=[...PRESET_REWARDS,...customs];
     const r=allRewards.find(x=>x.id===rewardId);
     const name=r?r.name:rewardId;
-    _qtyCtx={rewardId,cost,name,icon:r?.icon||'🎯'};
+    _qtyCtx={rewardId,cost,penalty:r?.penalty??5,name,icon:r?.icon||'🎯'};
     _qty=1;
     const dow=new Date().getDay();
     const penalty=dow>=1&&dow<=4;
     document.getElementById('qtyModalTitle').textContent=`${r?.icon||''} ${name}`;
+    const penaltyPts=r?.penalty??5;
     document.getElementById('qtyModalSub').textContent=penalty
-      ?`⚠️ Weekday penalty applies: cost + 5 pts per item`
+      ?`⚠️ Weekday: costs ${cost} + ${penaltyPts} pts penalty per item`
       :`Each costs ${cost} pts from your shared wallet`;
     updateQtyDisplay();
     document.getElementById('qtyModal').style.display='flex';
@@ -951,7 +955,7 @@
     if(!_qtyCtx) return;
     const dow=new Date().getDay();
     const penalty=dow>=1&&dow<=4;
-    const perItem=penalty?(_qtyCtx.cost+5):_qtyCtx.cost;
+    const perItem=penalty?(_qtyCtx.cost+(_qtyCtx.penalty??5)):_qtyCtx.cost;
     const total=_qty*perItem;
     document.getElementById('qtyNum').textContent=_qty;
     document.getElementById('qtyCost').textContent=`= ${total} pts${penalty?' (incl. penalty)':''} `;
@@ -973,7 +977,7 @@
     if(!_qtyCtx) return;
     const dow=new Date().getDay();
     const penalty=dow>=1&&dow<=4;
-    const perItem=penalty?(_qtyCtx.cost+5):_qtyCtx.cost;
+    const perItem=penalty?(_qtyCtx.cost+(_qtyCtx.penalty??5)):_qtyCtx.cost;
     const total=_qty*perItem;
     if(penalty){
       await fSet('reward_use',`${currentUser}_${today()}`,{used:true,rewardId:_qtyCtx.rewardId,qty:_qty});
@@ -995,11 +999,12 @@
     const icon=document.getElementById('rewardEmoji').value.trim()||'🎯';
     const name=document.getElementById('rewardName').value.trim();
     const cost=parseInt(document.getElementById('rewardCost').value);
+    const penalty=parseInt(document.getElementById('rewardPenalty').value)||5;
     if(!name||!cost){showToast('Fill in name and points');return;}
     const id='custom_'+Date.now();
-    await fSet('custom_rewards',id,{icon,name,cost});
+    await fSet('custom_rewards',id,{icon,name,cost,penalty});
     closeRewardModal();
-    ['rewardEmoji','rewardName','rewardCost'].forEach(x=>document.getElementById(x).value='');
+    ['rewardEmoji','rewardName','rewardCost','rewardPenalty'].forEach(x=>document.getElementById(x).value='');
     showToast(`${icon} ${name} added!`);
     renderRewards();
   };
