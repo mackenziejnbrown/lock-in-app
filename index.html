@@ -803,9 +803,13 @@
     const wk=currentWeekNum();
     const [mW,aW]=await Promise.all([calcWeekPts('MJB',wk),calcWeekPts('AJS',wk)]);
     const maxRef=35;
-    document.getElementById('ptsBars').innerHTML=`
-      <div class="pts-bar-row"><div class="pts-bar-name mjb">MJB</div><div class="pts-track"><div class="pts-fill mjb" style="width:${Math.min(100,(mW/maxRef)*100)}%"></div></div><div class="pts-num">${mW} pts</div></div>
-      <div class="pts-bar-row"><div class="pts-bar-name ajs">AJS</div><div class="pts-track"><div class="pts-fill ajs" style="width:${Math.min(100,(aW/maxRef)*100)}%"></div></div><div class="pts-num">${aW} pts</div></div>`;
+    const mkBar=(user,pts,cls)=>{
+      const pct=pts<=0?0:Math.min(100,(pts/maxRef)*100);
+      const fc=pts<0?'var(--red)':cls==='mjb'?'var(--mjb)':'var(--ajs)';
+      const nc=pts<0?'var(--red)':'var(--ink-muted)';
+      return `<div class="pts-bar-row"><div class="pts-bar-name ${cls}">${user}</div><div class="pts-track"><div class="pts-fill ${cls}" style="width:${pct}%;background:${fc}"></div></div><div class="pts-num" style="color:${nc}">${pts} pts</div></div>`;
+    };
+    document.getElementById('ptsBars').innerHTML=mkBar('MJB',mW,'mjb')+mkBar('AJS',aW,'ajs');
 
     await renderScorecard(wk,'rewardsScorecard');
 
