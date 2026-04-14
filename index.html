@@ -910,9 +910,9 @@
 
     const todayDow=new Date().getDay(), isFriWknd=todayDow===5||todayDow===0||todayDow===6;
     document.getElementById('rewardsGrid').innerHTML=allRewards.map(r=>{
-      const canAfford=walletTotal>=effectiveCost;
       const penaltyPts=r.penalty??5;
       const effectiveCost=isFriWknd?r.cost:(r.cost+penaltyPts);
+      const canAfford=walletTotal>=effectiveCost;
 
       return `<div class="reward-card ${canAfford?'unlocked':'locked'}" ${canAfford?`onclick="claimReward('${r.id}',${r.cost})"`:''}>
         ${r.custom?`<button class="rc-delete visible" onclick="event.stopPropagation();deleteReward('${r.id}')">✕</button>`:''}
