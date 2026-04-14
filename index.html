@@ -324,6 +324,17 @@
 
     <!-- TAB 3 -->
     <section id="rewards" class="section">
+      <div id="walletBanner" style="background:linear-gradient(120deg,var(--orange) 0%,#F0A050 100%);border-radius:18px;padding:1.2rem 1.6rem;color:white;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:0.85;margin-bottom:2px">Shared Wallet</div>
+          <div style="font-family:'Fraunces',serif;font-size:36px;font-weight:700;line-height:1" id="walletTotal">—</div>
+          <div style="font-size:13px;opacity:0.8;margin-top:2px">points to spend</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;opacity:0.75;margin-bottom:4px">Spent this month</div>
+          <div style="font-family:'Fraunces',serif;font-size:22px;font-weight:700" id="walletSpent">—</div>
+        </div>
+      </div>
       <div class="card">
         <div style="font-family:'Fraunces',serif;font-size:15px;color:var(--ink);margin-bottom:12px">This week's points</div>
         <div class="pts-bars" id="ptsBars"></div>
@@ -331,7 +342,7 @@
       </div>
       <div id="punishments"></div>
       <div class="sec-label">Weekly Rewards</div>
-      <p style="font-size:13px;color:var(--ink-muted);margin-bottom:1rem">Both need to hit the threshold to unlock. Using Mon–Thu = cost + 5 pts penalty.</p>
+      <p style="font-size:13px;color:var(--ink-muted);margin-bottom:1rem">Spend from your shared wallet. Using Mon–Thu = cost + 5 pts penalty.</p>
       <div class="rewards-grid" id="rewardsGrid"></div>
       <button class="add-reward-btn" onclick="openAddReward()">+ Add custom reward</button>
     </section>
@@ -420,9 +431,10 @@
   ];
   const PRESET_REWARDS = [
     {id:'coffee',name:'Cafe Coffee',icon:'☕',cost:8,custom:false},
-    {id:'lollies',name:'Lollies',icon:'🍬',cost:10,custom:false},
+    {id:'lollies',name:'Handful of Lollies',icon:'🍬',cost:3,custom:false},
+    {id:'ramyun',name:'Shin Ramyun',icon:'🍜',cost:5,custom:false},
     {id:'alcohol',name:'Alcohol',icon:'🍷',cost:15,custom:false},
-    {id:'takeaways',name:'Takeaways',icon:'🍜',cost:20,custom:false},
+    {id:'takeaways',name:'Takeaways',icon:'🥡',cost:20,custom:false},
   ];
 
   // STATE
@@ -489,6 +501,26 @@
 
   async function calcTotalPts(user){
     let t=0; for(let w=0;w<4;w++) t+=await calcWeekPts(user,w); return t;
+  }
+
+  // Write cached points after any log action — makes Rewards/Points tabs instant
+  async function refreshCache(user){
+    const weekPts=[];
+    for(let w=0;w<4;w++) weekPts.push(await calcWeekPts(user,w));
+    const total=weekPts.reduce((a,b)=>a+b,0);
+    await fSet('pts_cache',user,{weekPts,total,updatedAt:Date.now()});
+  }
+
+  // Read from cache (falls back to live calc if cache missing)
+  async function getCachedWeekPts(user,wk){
+    const c=await fGet('pts_cache',user);
+    if(c?.weekPts?.[wk]!==undefined) return c.weekPts[wk];
+    return await calcWeekPts(user,wk);
+  }
+  async function getCachedTotalPts(user){
+    const c=await fGet('pts_cache',user);
+    if(c?.total!==undefined) return c.total;
+    return await calcTotalPts(user);
   }
 
   // LOGIN
@@ -624,6 +656,7 @@
     await fSet('starts',`${currentUser}_${d}`,{type:newType});
     showToast(newType==='early'?'🌅 +2 pts!':newType==='late'?'😴 -3 pts':'Start removed');
     renderTicks(d,false);
+    await refreshCache(currentUser);
     updateWeekPts();
   };
 
@@ -632,6 +665,7 @@
     await fSet('meals',d,{ticked:!snap?.ticked});
     showToast(!snap?.ticked?'🥦 +1 pt for eating well!':'Tick removed');
     renderMealsInline(d);
+    await refreshCache(currentUser);
     updateWeekPts();
   };
 
@@ -645,6 +679,7 @@
       const act=SHARED_ACTS.find(a=>a.id===id);
       showToast(cur.includes(id)?`${act.name} removed`:`${act.icon} +${act.pts} pts each!`);
       renderActGrid(d,false);
+      await Promise.all([refreshCache('MJB'),refreshCache('AJS')]);
       updateWeekPts();
       return;
     }
@@ -655,6 +690,7 @@
     const act=ACTIVITIES.find(a=>a.id===id);
     showToast(cur.includes(id)?`${act.name} removed`:`${act.icon} +${act.pts} pts!`);
     renderActGrid(d,false);
+    await refreshCache(currentUser);
     updateWeekPts();
   };
 
@@ -801,7 +837,16 @@
   // TAB 3: REWARDS
   async function renderRewards(){
     const wk=currentWeekNum();
-    const [mW,aW]=await Promise.all([calcWeekPts('MJB',wk),calcWeekPts('AJS',wk)]);
+    const [mW,aW]=await Promise.all([getCachedWeekPts('MJB',wk),getCachedWeekPts('AJS',wk)]);
+
+    // Wallet: total earned across all weeks minus spent
+    const [mT,aT]=await Promise.all([getCachedTotalPts('MJB'),getCachedTotalPts('AJS')]);
+    const spentSnap=await fGet('wallet','spent');
+    const totalSpent=spentSnap?.total||0;
+    const walletTotal=Math.max(0,(mT+aT)-totalSpent);
+    document.getElementById('walletTotal').textContent=walletTotal;
+    document.getElementById('walletSpent').textContent=totalSpent+' pts';
+
     const maxRef=35;
     const mkBar=(user,pts,cls)=>{
       const pct=pts<=0?0:Math.min(100,(pts/maxRef)*100);
@@ -828,27 +873,38 @@
     }
     document.getElementById('punishments').innerHTML=punHtml;
 
-    const combined=mW+aW;
     const todayDow=new Date().getDay(), isFriWknd=todayDow===5||todayDow===0||todayDow===6;
     document.getElementById('rewardsGrid').innerHTML=allRewards.map(r=>{
-      const unlocked=combined>=r.cost;
-      return `<div class="reward-card ${unlocked?'unlocked':'locked'}" ${unlocked?`onclick="claimReward('${r.id}',${r.cost})"`:''}>
+      const canAfford=walletTotal>=r.cost;
+      return `<div class="reward-card ${canAfford?'unlocked':'locked'}" ${canAfford?`onclick="claimReward('${r.id}',${r.cost})"`:''}>
         ${r.custom?`<button class="rc-delete visible" onclick="event.stopPropagation();deleteReward('${r.id}')">✕</button>`:''}
         <div class="rc-icon">${r.icon}</div>
         <div class="rc-name">${r.name}</div>
-        <div class="rc-cost">${r.cost} combined pts</div>
-        <div class="rc-status ${unlocked?'unlocked':'locked'}">${unlocked?(isFriWknd?'🎉 Unlocked!':'⚠️ Early = penalty'):`Need ${r.cost} combined pts`}</div>
+        <div class="rc-cost">${r.cost} pts</div>
+        <div class="rc-status ${canAfford?'unlocked':'locked'}">${canAfford?(isFriWknd?'🎉 Afford it!':'⚠️ Early = penalty'):`Need ${r.cost} pts`}</div>
       </div>`;
     }).join('');
   }
 
   window.claimReward=async function(rewardId,cost){
+    const r=PRESET_REWARDS.find(x=>x.id===rewardId);
+    const name=r?r.name:rewardId;
     const dow=new Date().getDay();
-    if(dow>=1&&dow<=4){
-      if(!confirm(`Using this on a weekday costs ${cost+5} pts penalty. Sure?`)) return;
+    const penalty=dow>=1&&dow<=4;
+    if(penalty){
+      if(!confirm(`Using ${name} on a weekday costs ${cost+5} pts penalty (${cost} + 5). Sure?`)) return;
       await fSet('reward_use',`${currentUser}_${today()}`,{used:true,rewardId});
-      showToast(`⚠️ Penalty: −${cost+5} pts`);
-    } else { showToast('🎉 Enjoy your reward!'); }
+      await refreshCache(currentUser);
+      // Deduct cost + penalty from wallet
+      const spentSnap=await fGet('wallet','spent');
+      await fSet('wallet','spent',{total:(spentSnap?.total||0)+(cost+5)});
+      showToast(`⚠️ Penalty applied — ${cost+5} pts deducted`);
+    } else {
+      // Deduct just the cost
+      const spentSnap=await fGet('wallet','spent');
+      await fSet('wallet','spent',{total:(spentSnap?.total||0)+cost});
+      showToast(`🎉 Enjoy your ${name}! −${cost} pts`);
+    }
     renderRewards();
   };
 
@@ -873,13 +929,13 @@
 
   // TAB 4: POINTS
   async function renderPoints(){
-    const [mT,aT]=await Promise.all([calcTotalPts('MJB'),calcTotalPts('AJS')]);
+    const [mT,aT]=await Promise.all([getCachedTotalPts('MJB'),getCachedTotalPts('AJS')]);
     document.getElementById('mjbTotal').textContent=mT;
     document.getElementById('ajsTotal').textContent=aT;
     const wk=currentWeekNum();
     let rows='<div class="wb-row header-row" style="cursor:default"><div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--ink-muted)">Week</div><div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--mjb)">MJB 🩷</div><div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--ajs)">AJS 💚</div></div>';
     for(let w=0;w<4;w++){
-      const [mP,aP]=await Promise.all([calcWeekPts('MJB',w),calcWeekPts('AJS',w)]);
+      const [mP,aP]=await Promise.all([getCachedWeekPts('MJB',w),getCachedWeekPts('AJS',w)]);
       const days=getWeekDays(w);
       rows+=`<div class="wb-row ${w===wk?'current-week':''}" onclick="toggleWeekExpand(${w})">
         <div class="wb-week">Wk ${w+1} <span style="font-size:14px;color:var(--ink-muted)">▸</span><br><span style="font-size:10px;color:var(--ink-muted)">${fmtDate(days[0])}</span></div>
