@@ -82,7 +82,7 @@
   .act-check{position:absolute;top:6px;right:6px;width:18px;height:18px;border-radius:50%;background:var(--green-good);color:white;font-size:10px;display:none;align-items:center;justify-content:center;}
   .act-card.done .act-check,.act-card.done-shared .act-check{display:flex;}
   .act-card.done-shared .act-check{background:var(--orange);}
-  .weekend-act-note{font-size:12px;color:var(--orange);font-style:italic;margin-bottom:8px;padding:6px 10px;background:var(--orange-dim);border-radius:8px;}
+
   .planner-week-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;}
   .planner-week-nav h3{font-family:'Fraunces',serif;font-size:16px;color:var(--ink);}
   .nav-btn{background:none;border:1px solid var(--border2);border-radius:8px;padding:6px 13px;cursor:pointer;font-size:14px;color:var(--ink-muted);transition:all 0.15s;font-family:'DM Sans',sans-serif;}
@@ -434,16 +434,14 @@
       if(act)(act.logged||[]).forEach(id=>{const a=ACTIVITIES.find(x=>x.id===id);if(a)pts+=a.pts;});
       const sharedAct=cGet('shared_acts',d);
       if(sharedAct)(sharedAct.logged||[]).forEach(id=>{const a=SHARED_ACTS.find(x=>x.id===id);if(a)pts+=a.pts;});
-      // starts + reward penalties weekdays only
-      if(!isWeekend(d)){
-        const start=cGet('starts',`${user}_${d}`);
-        if(start?.type==='early') pts+=2;
-        if(start?.type==='late') pts-=3;
-        const dow=new Date(d).getDay();
-        if(dow>=1&&dow<=4){
-          const ruse=cGet('reward_use',`${user}_${d}`);
-          if(ruse?.used){const r=allRewards.find(x=>x.id===ruse.rewardId);if(r)pts-=((r.penalty??5)+r.cost);}
-        }
+      // starts count all week; reward penalties Mon-Thu only
+      const start=cGet('starts',`${user}_${d}`);
+      if(start?.type==='early') pts+=2;
+      if(start?.type==='late') pts-=3;
+      const dow=new Date(d).getDay();
+      if(dow>=1&&dow<=4){
+        const ruse=cGet('reward_use',`${user}_${d}`);
+        if(ruse?.used){const r=allRewards.find(x=>x.id===ruse.rewardId);if(r)pts-=((r.penalty??5)+r.cost);}
       }
     }
     return pts;
@@ -555,10 +553,10 @@
     const badge=document.getElementById('dayCardBadge');
     badge.textContent=wknd?'Weekend 🎉':'';
     badge.className=wknd?'weekend-badge':'';
-    // Morning goals — weekdays only
+    // Morning goals available all week
     const mgSec=document.getElementById('morningGoalsSection');
-    mgSec.style.display=wknd?'none':'';
-    if(!wknd) renderTicks(d);
+    mgSec.style.display='';
+    renderTicks(d);
     renderMealsInline(d);
     renderActGrid(d,wknd);
   }
@@ -591,20 +589,19 @@
     // Activities available ALL days including weekends — no points on weekends
     const wrap=document.getElementById('actGridWrap');
     wrap.innerHTML=
-      (wknd?'<div class="weekend-act-note">🌿 Weekend — keep moving! Activities logged but no points counted.</div>':'')+
       `<div class="activity-grid">${ACTIVITIES.map(a=>`
         <div class="act-card ${logged.includes(a.id)?'done':''}" onclick="toggleAct('${a.id}','${d}',false)">
           <div class="act-check">✓</div>
           <div class="ac-icon">${a.icon}</div>
           <div class="ac-name">${a.name}</div>
-          <div class="ac-pts">${wknd?'🏃 logged':'+'+a.pts+' pts'}</div>
+          <div class="ac-pts">+${a.pts} pts</div>
         </div>`).join('')}</div>`;
     document.getElementById('sharedActGrid').innerHTML=SHARED_ACTS.map(a=>`
       <div class="act-card ${shared.includes(a.id)?'done-shared':''}" onclick="toggleAct('${a.id}','${d}',true)">
         <div class="act-check">✓</div>
         <div class="ac-icon">${a.icon}</div>
         <div class="ac-name">${a.name}</div>
-        <div class="ac-pts">${wknd?'🏃 logged':'+'+a.pts+' each'}</div>
+        <div class="ac-pts">+${a.pts} each</div>
       </div>`).join('');
   }
 
@@ -628,7 +625,7 @@
       const updated=cur.includes(id)?cur.filter(x=>x!==id):[...cur,id];
       cSet('shared_acts',d,{...(snap||{}),logged:updated});
       const act=SHARED_ACTS.find(a=>a.id===id);
-      showToast(cur.includes(id)?`${act.name} removed`:wknd?`${act.icon} logged!`:`${act.icon} +${act.pts} pts each!`);
+      showToast(cur.includes(id)?`${act.name} removed`:`${act.icon} +${act.pts} pts each!`);
       renderActGrid(d,wknd);
       updateBannerPts();
       fSet('shared_acts',d,{logged:updated});
@@ -639,7 +636,7 @@
       const updated=cur.includes(id)?cur.filter(x=>x!==id):[...cur,id];
       cSet('acts',`${currentUser}_${d}`,{...(snap||{}),logged:updated});
       const act=ACTIVITIES.find(a=>a.id===id);
-      showToast(cur.includes(id)?`${act.name} removed`:wknd?`${act.icon} logged!`:`${act.icon} +${act.pts} pts!`);
+      showToast(cur.includes(id)?`${act.name} removed`:`${act.icon} +${act.pts} pts!`);
       renderActGrid(d,wknd);
       updateBannerPts();
       fSet('acts',`${currentUser}_${d}`,{logged:updated});
@@ -713,16 +710,16 @@
     if(act)(act.logged||[]).forEach(id=>{const a=ACTIVITIES.find(x=>x.id===id);if(a)items.push({label:`${a.icon} ${a.name}`,pts:a.pts,pos:true});});
     const sharedAct=cGet('shared_acts',d);
     if(sharedAct)(sharedAct.logged||[]).forEach(id=>{const a=SHARED_ACTS.find(x=>x.id===id);if(a)items.push({label:`${a.icon} ${a.name}`,pts:a.pts,pos:true});});
-    if(!isWeekend(d)){
-      const start=cGet('starts',`${user}_${d}`);
-      if(start?.type==='early') items.push({label:'🌅 Early start',pts:2,pos:true});
-      if(start?.type==='late') items.push({label:'😴 Late start',pts:-3,pos:false});
-      const dow=new Date(d).getDay();
-      if(dow>=1&&dow<=4){
-        const customs=getCustomRewardsFromCache(), allRewards=[...PRESET_REWARDS,...customs];
-        const ruse=cGet('reward_use',`${user}_${d}`);
-        if(ruse?.used){const r=allRewards.find(x=>x.id===ruse.rewardId);if(r)items.push({label:`⚠️ Early ${r.name}`,pts:-((r.penalty??5)+r.cost),pos:false});}
-      }
+    // Starts count all week
+    const start=cGet('starts',`${user}_${d}`);
+    if(start?.type==='early') items.push({label:'🌅 Early start',pts:2,pos:true});
+    if(start?.type==='late') items.push({label:'😴 Late start',pts:-3,pos:false});
+    // Reward penalties Mon-Thu only
+    const dow=new Date(d).getDay();
+    if(dow>=1&&dow<=4){
+      const customs=getCustomRewardsFromCache(), allRewards=[...PRESET_REWARDS,...customs];
+      const ruse=cGet('reward_use',`${user}_${d}`);
+      if(ruse?.used){const r=allRewards.find(x=>x.id===ruse.rewardId);if(r)items.push({label:`⚠️ Early ${r.name}`,pts:-((r.penalty??5)+r.cost),pos:false});}
     }
     return items;
   }
