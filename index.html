@@ -221,6 +221,11 @@
           <div class="wb-pts-item"><div class="wb-pts-name">AJS 💚</div><div class="wb-pts-num" id="wbAjs">0</div></div>
         </div>
       </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <button class="nav-btn" id="weekPrev" onclick="changeViewWeek(-1)">← Prev week</button>
+        <span style="font-size:12px;font-weight:500;color:var(--ink-muted)" id="weekRangeLabel"></span>
+        <button class="nav-btn" id="weekNext" onclick="changeViewWeek(1)">Next week →</button>
+      </div>
       <div class="day-strip" id="dayStrip"></div>
       <div class="day-card">
         <div class="day-card-header"><h3 id="dayCardTitle">—</h3><span id="dayCardBadge"></span></div>
@@ -375,7 +380,6 @@
   const SHARED_ACTS = [
     {id:'outside-together',name:'Outside Together',icon:'🌤️',pts:1},
     {id:'run-together',name:'Run Together',icon:'👫',pts:1},
-    {id:'ate-well',name:'Ate Well',icon:'🥦',pts:1},
   ];
   const PRESET_REWARDS = [
     {id:'coffee',name:'Cafe Coffee',icon:'☕',cost:5,penalty:5,custom:false},
@@ -387,6 +391,7 @@
 
   let currentUser = localStorage.getItem('lockin_user');
   let selectedDay = dateStr(new Date());
+  let viewWeek = currentWeekNum(); // which week the This Week tab is showing
   let plannerWeek = currentWeekNum();
   let mealCtx = null;
 
@@ -496,18 +501,38 @@
     selectedDay=today();
     const allDays=[0,1,2,3].flatMap(w=>getWeekDays(w));
     if(!allDays.includes(selectedDay)) selectedDay=dateStr(START);
+    // Init week nav
+    viewWeek=currentWeekNum();
+    const initDays=getWeekDays(viewWeek);
+    const wkLabel=document.getElementById('weekRangeLabel');
+    if(wkLabel) wkLabel.textContent=`Week ${viewWeek+1} · ${fmtDate(initDays[0])}–${fmtDate(initDays[6])}`;
+    document.getElementById('weekPrev').disabled=viewWeek===0;
+    document.getElementById('weekNext').disabled=viewWeek===3;
     renderThisWeek();
   }
 
   async function renderThisWeek(){
     await loadAllData();
-    const wk=currentWeekNum(), days=getWeekDays(wk);
+    const wk=currentWeekNum(), days=getWeekDays(viewWeek);
     document.getElementById('wbTitle').textContent=`Week ${wk+1} of 4`;
-    document.getElementById('wbDates').textContent=`${fmtDate(days[0])} – ${fmtDate(days[6])}`;
+    document.getElementById('wbDates').textContent=`${fmtDate(getWeekDays(wk)[0])} – ${fmtDate(getWeekDays(wk)[6])}`;
     updateBannerPts();
     renderDayStrip(days);
     renderDayCard();
   }
+
+  window.changeViewWeek=function(delta){
+    viewWeek=Math.max(0,Math.min(3,viewWeek+delta));
+    const days=getWeekDays(viewWeek);
+    // Select first day of new week if current selectedDay not in this week
+    if(!days.includes(selectedDay)) selectedDay=days[0];
+    const wkLabel=document.getElementById('weekRangeLabel');
+    if(wkLabel) wkLabel.textContent=`Week ${viewWeek+1} · ${fmtDate(days[0])}–${fmtDate(days[6])}`;
+    document.getElementById('weekPrev').disabled=viewWeek===0;
+    document.getElementById('weekNext').disabled=viewWeek===3;
+    renderDayStrip(days);
+    renderDayCard();
+  };
 
   function renderDayStrip(days){
     document.getElementById('dayStrip').innerHTML=days.map((d,i)=>{
@@ -520,7 +545,7 @@
 
   window.selectDay=function(d){
     selectedDay=d;
-    renderDayStrip(getWeekDays(currentWeekNum()));
+    renderDayStrip(getWeekDays(viewWeek));
     renderDayCard();
   };
 
