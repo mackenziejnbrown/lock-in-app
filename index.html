@@ -373,13 +373,21 @@
     {id:'gym-total',name:'Gym — Total',icon:'🏆',pts:3},
     {id:'run',name:'Run',icon:'🏃',pts:4},
     {id:'pilates',name:'Pilates',icon:'🧘',pts:2},
-    {id:'yoga',name:'Yoga / Stretch',icon:'🌿',pts:2},
+    {id:'yoga',name:'Yoga',icon:'🌿',pts:2},
     {id:'walk',name:'Walk',icon:'🚶',pts:1},
     {id:'long-walk',name:'Long Walk',icon:'🥾',pts:3},
   ];
   const SHARED_ACTS = [
     {id:'outside-together',name:'Outside Together',icon:'🌤️',pts:1},
     {id:'run-together',name:'Run Together',icon:'👫',pts:1},
+  ];
+  // Individual bonus goals — logged per person, shown in Bonus Goals section
+  const INDIVIDUAL_BONUS = [
+    {id:'beast-mode',name:'Beast Mode',icon:'🦁',pts:1},
+    {id:'morning-stretch',name:'Morning Stretching',icon:'🌅',pts:1},
+    {id:'evening-stretch',name:'Evening Stretching',icon:'🌙',pts:1},
+    {id:'low-screen',name:'Low Screen Time (<1.5h)',icon:'📵',pts:2},
+    {id:'no-screens',name:'No Screens After 8:30pm',icon:'🌛',pts:2},
   ];
   const PRESET_REWARDS = [
     {id:'coffee',name:'Cafe Coffee',icon:'☕',cost:5,penalty:5,custom:false},
@@ -412,11 +420,11 @@
   // Cache
   let _cache = {};
   async function loadAllData(){
-    const [acts,shared_acts,meals,starts,reward_use,custom_rewards,pts_cache,wallet] = await Promise.all([
-      fGetAll('acts'),fGetAll('shared_acts'),fGetAll('meals'),fGetAll('starts'),
+    const [acts,shared_acts,bonus_acts,meals,starts,reward_use,custom_rewards,pts_cache,wallet] = await Promise.all([
+      fGetAll('acts'),fGetAll('shared_acts'),fGetAll('bonus_acts'),fGetAll('meals'),fGetAll('starts'),
       fGetAll('reward_use'),fGetAll('custom_rewards'),fGetAll('pts_cache'),fGetAll('wallet')
     ]);
-    _cache={acts,shared_acts,meals,starts,reward_use,custom_rewards,pts_cache,wallet};
+    _cache={acts,shared_acts,bonus_acts,meals,starts,reward_use,custom_rewards,pts_cache,wallet};
   }
   function cGet(col,id){ return _cache[col]?.[id]||null; }
   function cSet(col,id,data){ if(!_cache[col])_cache[col]={}; _cache[col][id]=data; }
@@ -434,6 +442,8 @@
       if(act)(act.logged||[]).forEach(id=>{const a=ACTIVITIES.find(x=>x.id===id);if(a)pts+=a.pts;});
       const sharedAct=cGet('shared_acts',d);
       if(sharedAct)(sharedAct.logged||[]).forEach(id=>{const a=SHARED_ACTS.find(x=>x.id===id);if(a)pts+=a.pts;});
+      const bonusAct=cGet('bonus_acts',`${user}_${d}`);
+      if(bonusAct)(bonusAct.logged||[]).forEach(id=>{const a=INDIVIDUAL_BONUS.find(x=>x.id===id);if(a)pts+=a.pts;});
       // starts count all week; reward penalties Mon-Thu only
       const start=cGet('starts',`${user}_${d}`);
       if(start?.type==='early') pts+=2;
@@ -590,19 +600,29 @@
     const wrap=document.getElementById('actGridWrap');
     wrap.innerHTML=
       `<div class="activity-grid">${ACTIVITIES.map(a=>`
-        <div class="act-card ${logged.includes(a.id)?'done':''}" onclick="toggleAct('${a.id}','${d}',false)">
+        <div class="act-card ${logged.includes(a.id)?'done':''}" onclick="toggleAct('${a.id}','${d}','act')">
           <div class="act-check">✓</div>
           <div class="ac-icon">${a.icon}</div>
           <div class="ac-name">${a.name}</div>
           <div class="ac-pts">+${a.pts} pts</div>
         </div>`).join('')}</div>`;
-    document.getElementById('sharedActGrid').innerHTML=SHARED_ACTS.map(a=>`
-      <div class="act-card ${shared.includes(a.id)?'done-shared':''}" onclick="toggleAct('${a.id}','${d}',true)">
+    const bonusSnap=cGet('bonus_acts',`${currentUser}_${d}`);
+    const bonusLogged=bonusSnap?.logged||[];
+    const sharedHtml=SHARED_ACTS.map(a=>`
+      <div class="act-card ${shared.includes(a.id)?'done-shared':''}" onclick="toggleAct('${a.id}','${d}','shared')">
         <div class="act-check">✓</div>
         <div class="ac-icon">${a.icon}</div>
         <div class="ac-name">${a.name}</div>
         <div class="ac-pts">+${a.pts} each</div>
       </div>`).join('');
+    const bonusHtml=INDIVIDUAL_BONUS.map(a=>`
+      <div class="act-card ${bonusLogged.includes(a.id)?'done':''}" onclick="toggleAct('${a.id}','${d}','bonus')">
+        <div class="act-check">✓</div>
+        <div class="ac-icon">${a.icon}</div>
+        <div class="ac-name">${a.name}</div>
+        <div class="ac-pts">+${a.pts} pts</div>
+      </div>`).join('');
+    document.getElementById('sharedActGrid').innerHTML=sharedHtml+bonusHtml;
   }
 
   window.logStart=function(type){
@@ -617,9 +637,9 @@
     refreshCache(currentUser);
   };
 
-  window.toggleAct=function(id,d,isShared){
+  window.toggleAct=function(id,d,mode){
     const wknd=isWeekend(d);
-    if(isShared){
+    if(mode==='shared'){
       const snap=cGet('shared_acts',d);
       const cur=snap?.logged||[];
       const updated=cur.includes(id)?cur.filter(x=>x!==id):[...cur,id];
@@ -630,7 +650,18 @@
       updateBannerPts();
       fSet('shared_acts',d,{logged:updated});
       refreshCache('MJB'); refreshCache('AJS');
-    } else {
+    } else if(mode==='bonus'){
+      const snap=cGet('bonus_acts',`${currentUser}_${d}`);
+      const cur=snap?.logged||[];
+      const updated=cur.includes(id)?cur.filter(x=>x!==id):[...cur,id];
+      cSet('bonus_acts',`${currentUser}_${d}`,{...(snap||{}),logged:updated});
+      const act=INDIVIDUAL_BONUS.find(a=>a.id===id);
+      showToast(cur.includes(id)?`${act.name} removed`:`${act.icon} +${act.pts} pts!`);
+      renderActGrid(d,wknd);
+      updateBannerPts();
+      fSet('bonus_acts',`${currentUser}_${d}`,{logged:updated});
+      refreshCache(currentUser);
+    } else { // 'act' or any other value
       const snap=cGet('acts',`${currentUser}_${d}`);
       const cur=snap?.logged||[];
       const updated=cur.includes(id)?cur.filter(x=>x!==id):[...cur,id];
@@ -710,6 +741,8 @@
     if(act)(act.logged||[]).forEach(id=>{const a=ACTIVITIES.find(x=>x.id===id);if(a)items.push({label:`${a.icon} ${a.name}`,pts:a.pts,pos:true});});
     const sharedAct=cGet('shared_acts',d);
     if(sharedAct)(sharedAct.logged||[]).forEach(id=>{const a=SHARED_ACTS.find(x=>x.id===id);if(a)items.push({label:`${a.icon} ${a.name}`,pts:a.pts,pos:true});});
+    const bonusAct=cGet('bonus_acts',`${user}_${d}`);
+    if(bonusAct)(bonusAct.logged||[]).forEach(id=>{const a=INDIVIDUAL_BONUS.find(x=>x.id===id);if(a)items.push({label:`${a.icon} ${a.name}`,pts:a.pts,pos:true});});
     // Starts count all week
     const start=cGet('starts',`${user}_${d}`);
     if(start?.type==='early') items.push({label:'🌅 Early start',pts:2,pos:true});
